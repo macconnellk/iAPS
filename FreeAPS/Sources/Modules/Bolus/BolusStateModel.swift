@@ -116,10 +116,10 @@ extension Bolus {
             }
             // insulin needed for the current blood glucose
             let targetDifference = (currentBG - target) * conversion
-            targetDifferenceInsulin = targetDifference / isf
+            // targetDifferenceInsulin = targetDifference / isf
 
             // more or less insulin because of bg trend in the last 15 minutes
-            fifteenMinInsulin = (deltaBG * conversion) / isf
+            // fifteenMinInsulin = (deltaBG * conversion) / isf
 
             // determine whole COB for which we want to dose insulin for and then determine insulin for wholeCOB
             wholeCobInsulin = cob / carbRatio
