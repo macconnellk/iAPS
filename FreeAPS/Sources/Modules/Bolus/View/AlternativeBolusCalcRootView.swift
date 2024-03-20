@@ -406,7 +406,7 @@ extension Bolus {
                         .foregroundColor(.secondary)
                 }
                 HStack {
-                    Text("Fraction")
+                    Text("COB Fraction")
                         .foregroundColor(.secondary)
                     Spacer()
                     let fraction = state.fraction
@@ -414,7 +414,7 @@ extension Bolus {
                 }
                 if state.useFattyMealCorrectionFactor {
                     HStack {
-                        Text("Fatty Meal Factor")
+                        Text("Carbs Fraction")
                             .foregroundColor(.orange)
                         Spacer()
                         let fraction = state.fattyMealFactor
