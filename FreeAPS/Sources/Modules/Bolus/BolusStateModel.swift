@@ -65,6 +65,7 @@ extension Bolus {
         @Published var fat: Decimal = 0
         @Published var protein: Decimal = 0
         @Published var note: String = ""
+        @Published var dontUseBolusCalculator: Bool = false
 
         override func subscribe() {
             setupInsulinRequired()
@@ -79,6 +80,7 @@ extension Bolus {
             fattyMeals = settings.settings.fattyMeals
             fattyMealFactor = settings.settings.fattyMealFactor
             displayPredictions = settings.settings.displayPredictions
+            dontUseBolusCalculator = settings.settings.dontUseBolusCalculator
 
             if waitForSuggestionInitial {
                 apsManager.determineBasal()
@@ -92,7 +94,6 @@ extension Bolus {
                         }
                     }.store(in: &lifetime)
             }
-            
             if let notNilSugguestion = provider.suggestion {
                 suggestion = notNilSugguestion
                 if let notNilPredictions = suggestion?.predictions {
@@ -117,10 +118,10 @@ extension Bolus {
             }
             // insulin needed for the current blood glucose
             let targetDifference = (currentBG - target) * conversion
-            // targetDifferenceInsulin = targetDifference / isf
+            targetDifferenceInsulin = targetDifference / isf
 
             // more or less insulin because of bg trend in the last 15 minutes
-            // fifteenMinInsulin = (deltaBG * conversion) / isf
+            fifteenMinInsulin = (deltaBG * conversion) / isf
 
             // determine whole COB for which we want to dose insulin for and then determine insulin for wholeCOB
             wholeCobInsulin = cob / carbRatio
@@ -258,12 +259,22 @@ extension Bolus {
             }
         }
 
+        func carbsView(fetch: Bool, hasFatOrProtein: Bool, mealSummary: FetchedResults<Meals>) -> Bool {
+            var keepForNextWiew = false
+            if fetch {
+                keepForNextWiew = true
+                backToCarbsView(complexEntry: hasFatOrProtein, mealSummary, override: false, deleteNothing: false, editMode: true)
+            } else {
+                backToCarbsView(complexEntry: false, mealSummary, override: true, deleteNothing: true, editMode: false)
+            }
+            return keepForNextWiew
+        }
+
         func remoteBolus() -> String? {
             if let enactedAnnouncement = announcementStorage.recentEnacted() {
                 let components = enactedAnnouncement.notes.split(separator: ":")
                 guard components.count == 2 else { return nil }
                 let command = String(components[0]).lowercased()
-                let arguments = String(components[1]).lowercased()
                 let eventual: String = units == .mmolL ? evBG.asMmolL
                     .formatted(.number.grouping(.never).rounded().precision(.fractionLength(1))) : evBG.formatted()
 
