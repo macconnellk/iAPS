@@ -124,7 +124,7 @@ extension Bolus {
             deltaBG = delta
         }
 
-        func calculateInsulin() -> Decimal {
+        func calculateInsulin(carbs2: Decimal) -> Decimal {
             var conversion: Decimal = 1.0
             if units == .mmolL {
                 conversion = 0.0555
