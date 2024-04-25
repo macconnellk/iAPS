@@ -59,6 +59,10 @@ extension Bolus {
         @Published var fattyMealFactor: Decimal = 0
         @Published var useFattyMealCorrectionFactor: Bool = false
         @Published var displayPredictions: Bool = true
+        @Published var LatestCarbEntryInsulin: Decimal = 0
+        @Published var roundedLatestCarbEntryInsulin: Decimal = 0
+        @Published var log_roundedWholeCalc: Decimal = 0
+        @Published var wholeCalc_carbs: Decimal = 0
 
         @Published var meal: [CarbsEntry]?
         @Published var carbs: Decimal = 0
@@ -66,6 +70,15 @@ extension Bolus {
         @Published var protein: Decimal = 0
         @Published var note: String = ""
         @Published var dontUseBolusCalculator: Bool = false
+
+        @FetchRequest(
+            entity: Meals.entity(),
+            sortDescriptors: [NSSortDescriptor(key: "createdAt", ascending: false)]
+        ) var Latestmeal: FetchedResults<Meals>
+ 
+        @Published var logMessage: String = ""
+        @Published var latestCarbValue: Decimal = 0
+        @Published var carbs2: Decimal = 0
 
         override func subscribe() {
             setupInsulinRequired()
@@ -121,7 +134,7 @@ extension Bolus {
             targetDifferenceInsulin = targetDifference / isf
 
             // more or less insulin because of bg trend in the last 15 minutes
-            fifteenMinInsulin = (deltaBG * conversion) / isf
+            // fifteenMinInsulin = (deltaBG * conversion) / isf
 
             // determine whole COB for which we want to dose insulin for and then determine insulin for wholeCOB
             wholeCobInsulin = cob / carbRatio
@@ -142,6 +155,34 @@ extension Bolus {
                     wholeCalc = (targetDifferenceInsulin + iobInsulinReduction + wholeCobInsulin)
                 }
             }
+            
+            if carbs2 > 0 {      
+                
+                // For max_cob = 60   
+                if carbs2 >= 60 {
+                   //calculate insulin for latest carb entry
+                    LatestCarbEntryInsulin = 60 / carbRatio
+                    wholeCalc_carbs = LatestCarbEntryInsulin 
+                } else {  
+                    //calculate insulin for latest carb entry
+                    LatestCarbEntryInsulin = carbs2 / carbRatio
+                    wholeCalc_carbs = LatestCarbEntryInsulin
+                }   
+                 
+                // logging and rounding LatestCarbEntryInsulin and wholecalc
+                let LatestCarbEntryInsulinAsDouble = Double(LatestCarbEntryInsulin)
+                roundedLatestCarbEntryInsulin = Decimal(round(100 * LatestCarbEntryInsulinAsDouble) / 100)
+                let Log_wholeCalcAsDouble = Double(wholeCalc)
+                log_roundedWholeCalc = Decimal(round(100 * Log_wholeCalcAsDouble) / 100)
+                logMessage = "Carbs:\(carbs2) -> \(roundedLatestCarbEntryInsulin)\nwholeCalc:\(log_roundedWholeCalc)"
+
+            
+                wholeCalc = min(wholeCalc, wholeCalc_carbs)
+                
+           } else {
+                logMessage = "\nNo New Carbs (carbs2=0)"
+            }
+            
             // rounding
             let wholeCalcAsDouble = Double(wholeCalc)
             roundedWholeCalc = Decimal(round(100 * wholeCalcAsDouble) / 100)
@@ -218,10 +259,11 @@ extension Bolus {
                 self.insulinRecommended = self.apsManager
                     .roundBolus(amount: max(self.insulinRecommended, 0))
 
-                if self.useCalc {
-                    self.getDeltaBG()
-                    self.insulinCalculated = self.calculateInsulin()
-                }
+                // Disabling the intial insulin calculation to require an OnClick in the View code.  Allows carb entries to be assessed in the calculation rather than only COB
+                // if self.useCalc {
+                //    self.getDeltaBG()
+                //    self.insulinCalculated = self.calculateInsulin()
+                // }
             }
         }
 
