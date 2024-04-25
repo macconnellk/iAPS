@@ -27,7 +27,7 @@ extension Bolus {
         @FetchRequest(
             entity: Meals.entity(),
             sortDescriptors: [NSSortDescriptor(key: "createdAt", ascending: false)]
-        ) let meal: FetchedResults<Meals>
+        ) var meal: FetchedResults<Meals>
         let mealEntries: any View
 
         private var formatter: NumberFormatter {
