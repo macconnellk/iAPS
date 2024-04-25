@@ -24,10 +24,7 @@ extension Bolus {
         @Environment(\.colorScheme) var colorScheme
         @FocusState private var isFocused: Bool
 
-        @FetchRequest(
-            entity: Meals.entity(),
-            sortDescriptors: [NSSortDescriptor(key: "createdAt", ascending: false)]
-        ) var meal: FetchedResults<Meals>
+        let meal: FetchedResults<Meals>
         let mealEntries: any View
 
         private var formatter: NumberFormatter {
