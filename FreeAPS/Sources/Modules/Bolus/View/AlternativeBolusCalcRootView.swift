@@ -86,15 +86,21 @@ extension Bolus {
                             .font(.footnote)
                             .buttonStyle(PlainButtonStyle())
                             .frame(maxWidth: .infinity, alignment: .leading)
+                     // Highjackig Fatty Meals Functionality to enable calculation of insulin using latest carbs or COB
                         if state.fattyMeals {
                             Spacer()
                             Toggle(isOn: $state.useFattyMealCorrectionFactor) {
-                                Text("Fatty Meal")
+                                Text("Calculate Insulin")
                             }
                             .toggleStyle(CheckboxToggleStyle())
                             .font(.footnote)
                             .onChange(of: state.useFattyMealCorrectionFactor) { _ in
-                                state.insulinCalculated = state.calculateInsulin()
+                                if let carbs2 = meal.first?.carbs, carbs2 > 0 {
+                                state.insulinCalculated = state.calculateInsulin(carbs2: Decimal(carbs2))
+                                } else {
+                                  let carbs2 = 0  
+                                  state.insulinCalculated = state.calculateInsulin(carbs2: Decimal(carbs2))
+                                }   
                             }
                         }
                     }
@@ -224,7 +230,13 @@ extension Bolus {
                 configureView {
                     state.waitForSuggestionInitial = waitForSuggestion
                     state.waitForSuggestion = waitForSuggestion
-                    state.insulinCalculated = state.calculateInsulin()
+                    if let carbs2 = meal.first?.carbs, carbs2 > 0 {
+                        state.insulinCalculated = state.calculateInsulin(carbs2: Decimal(carbs2))
+                    } else {
+                        // Provide a default value for carbs if necessary
+                        let carbs2 = 0
+                        state.insulinCalculated = state.calculateInsulin(carbs2: Decimal(carbs2))
+                        }      
                 }
             }
             .onDisappear {
@@ -268,8 +280,10 @@ extension Bolus {
                     Divider().frame(height: Config.dividerHeight) // .overlay(Config.overlayColour)
                     VStack {
                         HStack {
-                            Text("Full Bolus")
-                                .foregroundColor(.secondary)
+                            let logMessage = state.logMessage
+                            // Combine "Full Bolus", log message, and potential styling
+                            Text("Full Bolus " + (logMessage.isEmpty ? "" : "(\(logMessage))"))
+                            .foregroundColor(logMessage.isEmpty ? .secondary : .yellow)  // Optional highlight
                             Spacer()
                             let insulin = state.roundedWholeCalc
                             Text(insulin.formatted()).foregroundStyle(state.roundedWholeCalc < 0 ? Color.loopRed : Color.primary)
@@ -373,7 +387,7 @@ extension Bolus {
                 }
                 if state.useFattyMealCorrectionFactor {
                     HStack {
-                        Text("Fatty Meal Factor")
+                        Text("Carb Entry Fraction")
                             .foregroundColor(.orange)
                         Spacer()
                         let fraction = state.fattyMealFactor
