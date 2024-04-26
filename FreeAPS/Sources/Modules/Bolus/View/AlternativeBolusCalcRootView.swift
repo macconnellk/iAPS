@@ -92,8 +92,7 @@ extension Bolus {
                             .toggleStyle(CheckboxToggleStyle())
                             .font(.footnote)
                             .onChange(of: state.useFattyMealCorrectionFactor) { _ in
-                              var threeMinutesAgo = Date().addingTimeInterval(-180)
-                              if let carbs2 = meal.first?.carbs, carbs2 > 0, meal.first?.createdAt > threeMinutesAgo  {
+                              if let carbs2 = meal.first?.carbs, carbs2 > 0  {
                                 state.insulinCalculated = state.calculateInsulin(carbs2: Decimal(carbs2))
                                 } else {
                                   let carbs2 = 0  
