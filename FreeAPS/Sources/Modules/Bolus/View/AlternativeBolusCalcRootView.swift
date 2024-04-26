@@ -93,7 +93,7 @@ extension Bolus {
                             .font(.footnote)
                             .onChange(of: state.useFattyMealCorrectionFactor) { _ in
                                 let threeMinutesAgo = Date().addingTimeInterval(-180)
-                                if let carbs2 = meal.first?.carbs, carbs2 > 0, meal.first?.createdat > threeMinutesAgo  {
+                                if let carbs2 = meal.first?.carbs, carbs2 > 0, meal.first?.createdAt > threeMinutesAgo  {
                                 state.insulinCalculated = state.calculateInsulin(carbs2: Decimal(carbs2))
                                 } else {
                                   let carbs2 = 0  
