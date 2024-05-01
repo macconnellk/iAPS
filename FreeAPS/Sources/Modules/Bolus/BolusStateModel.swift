@@ -131,8 +131,8 @@ extension Bolus {
             }
             // insulin needed for the current blood glucose
             let targetDifference = (currentBG - target) * conversion
-            // Disable correction insulin to let SMBs handle
-            // targetDifferenceInsulin = targetDifference / isf
+            // Deliver half correction insulin to let SMBs handle rest
+            targetDifferenceInsulin = (targetDifference / isf) / 2
 
             // more or less insulin because of bg trend in the last 15 minutes
             // Disable trend insulin to let SMBs handle
