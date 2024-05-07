@@ -133,8 +133,11 @@ extension Bolus {
             let targetDifference = (currentBG - target) * conversion
             // Deliver half correction insulin to let SMBs handle rest
             if currentBG > 160 {
-            targetDifferenceInsulin = (targetDifference / isf) / 2
-            }
+                targetDifferenceInsulin = (targetDifference / isf) / 2
+                }
+            if currentBG > 200 {
+                targetDifferenceInsulin = (targetDifference / isf)
+                }
 
             // more or less insulin because of bg trend in the last 15 minutes
             // Disable trend insulin to let SMBs handle
