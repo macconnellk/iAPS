@@ -132,10 +132,10 @@ extension Bolus {
             // insulin needed for the current blood glucose
             let targetDifference = (currentBG - target) * conversion
             // Deliver half correction insulin to let SMBs handle rest
-            if currentBG > 160 {
+            if currentBG > 140 {
                 targetDifferenceInsulin = (targetDifference / isf) / 2
                 }
-            if currentBG > 200 {
+            if currentBG > 160 {
                 targetDifferenceInsulin = (targetDifference / isf)
                 }
 
