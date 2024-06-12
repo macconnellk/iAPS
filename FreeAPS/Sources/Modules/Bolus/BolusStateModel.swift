@@ -119,20 +119,28 @@ extension Bolus {
                 (Decimal(glucose[3].glucose + glucose[2].glucose) / 2)
         }
 
+
+        func getCarbs(meal: FetchedResults<Meals>) {
+            guard let meals = meal.first else {
+                return "No Carbs"
+            }
+
+            let selectedCarbData = DataTable.Treatment(
+                units: units,
+                type: .carbs,
+                date: .createdAt 
+            )
+                return selectedCarbData
+            }
+        
         func calculateInsulin() -> Decimal {
             let conversion: Decimal = units == .mmolL ? 0.0555 : 1
             // The actual glucose threshold
             threshold = max(target - 0.5 * (target - 40 * conversion), threshold * conversion)
 
-           
-               let selectedCarbData = DataTable.Treatment(
-                  units: units,
-                  type: .carbs
-                    
-            )
+            Getcarbs()
+            logMessage = "Carbs:\(selectedCarbData)"
             
-               logMessage = "Carbs:\(selectedCarbData)"
-
             // Use either the eventual glucose prediction or just the Swift code
             if eventualBG {
                 if evBG > target {
