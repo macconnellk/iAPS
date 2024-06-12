@@ -126,7 +126,7 @@ extension Bolus {
 
             if let firstMeal = meal?.first {
                let latestCarbValue = firstMeal.carbs
-               // Use the 'carbs' variable here
+               logMessage = "Carbs:\(latestCarbValue)"
              }
 
             // Use either the eventual glucose prediction or just the Swift code
