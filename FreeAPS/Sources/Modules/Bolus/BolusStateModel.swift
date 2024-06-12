@@ -128,7 +128,7 @@ extension Bolus {
                let selectedCarbData = DataTable.Treatment(
                   units: units,
                   type: .carbs,
-                  date: meals.actualDate ?? Date()  
+                  date: .actualDate  
             )
             
                logMessage = "Carbs:\(selectedCarbData)"
