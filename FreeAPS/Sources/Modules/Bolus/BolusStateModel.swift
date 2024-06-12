@@ -67,6 +67,13 @@ extension Bolus {
         @Published var eventualBG: Bool = false
         @Published var minimumPrediction: Bool = false
 
+        @Published var LatestCarbEntryInsulin: Decimal = 0
+        @Published var roundedLatestCarbEntryInsulin: Decimal = 0
+        @Published var log_roundedWholeCalc: Decimal = 0
+        @Published var wholeCalc_carbs: Decimal = 0
+        @Published var logMessage: String = ""
+        @Published var latestCarbValue: Decimal = 0
+        @Published var carbs2: Decimal = 0
 
 
         override func subscribe() {
@@ -118,7 +125,7 @@ extension Bolus {
             threshold = max(target - 0.5 * (target - 40 * conversion), threshold * conversion)
 
             if let firstMeal = meal?.first {
-               let lastcarbentry = firstMeal.carbs
+               let latestCarbValue = firstMeal.carbs
                // Use the 'carbs' variable here
              }
 
