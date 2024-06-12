@@ -74,7 +74,7 @@ extension Bolus {
         @Published var logMessage: String = "test"
         @Published var latestCarbValue: Decimal = 0
         @Published var carbs2: Decimal = 0
-        @Published var selectedCarbData Decimal = 0
+        @Published var latestCarbEntry Decimal = 0
 
 
         override func subscribe() {
@@ -121,25 +121,30 @@ extension Bolus {
         }
 
 
-        func getCarbs(meal: FetchedResults<Meals>) {
-            guard let meals = meal.first else {
-                return 
-            }
-
-            let selectedCarbData = DataTable.Treatment(
-                units: units,
-                type: .carbs 
-            )
-                return selectedCarbData
-            }
+            func getLatestCarbEntry() -> Decimal {
+                  // Initialize variables
+                  var latestCarbEntry: Decimal = 0
+  
+                  // Access carbs data from the Bolus.StateModel instance
+                  if let carbsData = self.meal {
+                    // Check if there's any data available
+                    if !carbsData.isEmpty {
+                      // Assuming carbs data is sorted by date in descending order, access the first entry (most recent)
+                      latestCarbEntry = carbsData[0].carbs
+                    }
+                  }
+  
+                  // Return the latest carb entry value
+                  return latestCarbEntry
+                }
         
         func calculateInsulin() -> Decimal {
             let conversion: Decimal = units == .mmolL ? 0.0555 : 1
             // The actual glucose threshold
             threshold = max(target - 0.5 * (target - 40 * conversion), threshold * conversion)
 
-            getCarbs()
-            logMessage = "Carbs:\(selectedCarbData)"
+            getLatestCarbEntry()
+            logMessage = "Carbs:\(latestCarbEntry)"
             
             // Use either the eventual glucose prediction or just the Swift code
             if eventualBG {
