@@ -67,6 +67,8 @@ extension Bolus {
         @Published var eventualBG: Bool = false
         @Published var minimumPrediction: Bool = false
 
+
+
         override func subscribe() {
             setupInsulinRequired()
             broadcaster.register(SuggestionObserver.self, observer: self)
@@ -114,6 +116,11 @@ extension Bolus {
             let conversion: Decimal = units == .mmolL ? 0.0555 : 1
             // The actual glucose threshold
             threshold = max(target - 0.5 * (target - 40 * conversion), threshold * conversion)
+
+            if let firstMeal = meal?.first {
+               let lastcarbentry = firstMeal.carbs
+               // Use the 'carbs' variable here
+             }
 
             // Use either the eventual glucose prediction or just the Swift code
             if eventualBG {
