@@ -98,6 +98,12 @@ extension Bolus {
                                 }
                             }
                         }
+
+                        HStack {
+                            let logMessage = state.logMessage
+                            Text("Log " + (logMessage.isEmpty ? "" : "(\(logMessage))"))
+                        }
+                        
                     }
 
                     if state.waitForSuggestion {
@@ -141,19 +147,6 @@ extension Bolus {
                             exceededMaxBolus = false
                         }
                     }
-                    
-                    HStack {
-                            let logMessage = state.logMessage
-                            // Combine "Full Bolus", log message, and potential styling
-                            Text("Full Bolus " + (logMessage.isEmpty ? "" : "(\(logMessage))"))
-                            .foregroundColor(logMessage.isEmpty ? .secondary : .yellow)  // Optional highlight
-                            Spacer()
-                            let insulin = state.roundedWholeCalc
-                            Text(insulin.formatted()).foregroundStyle(state.roundedWholeCalc < 0 ? Color.loopRed : Color.primary)
-                            Text(" U")
-                                .foregroundColor(.secondary)
-                        }
-                
                 }
 
                 if state.amount > 0 {
