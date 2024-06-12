@@ -125,12 +125,11 @@ extension Bolus {
             threshold = max(target - 0.5 * (target - 40 * conversion), threshold * conversion)
 
            
-               let selectedCarbData = DataTable.Treatment({
+               let selectedCarbData = DataTable.Treatment(
                   units: units,
-                  type: .carbs, // Original type definition
-                  date: meals.actualDate ?? Date(), // Use actualDate if exists
-                  id: meals.id ?? "", // Include id for consistency (optional)
-                    });
+                  type: .carbs,
+                  date: meals.actualDate ?? Date()  
+            )
             
                logMessage = "Carbs:\(selectedCarbData)"
 
