@@ -74,6 +74,7 @@ extension Bolus {
         @Published var logMessage: String = "test"
         @Published var latestCarbValue: Decimal = 0
         @Published var carbs2: Decimal = 0
+        @Published var selectedCarbData Decimal = 0
 
 
         override func subscribe() {
@@ -122,13 +123,12 @@ extension Bolus {
 
         func getCarbs(meal: FetchedResults<Meals>) {
             guard let meals = meal.first else {
-                return "No Carbs"
+                return 
             }
 
             let selectedCarbData = DataTable.Treatment(
                 units: units,
-                type: .carbs,
-                date: .createdAt 
+                type: .carbs 
             )
                 return selectedCarbData
             }
@@ -138,7 +138,7 @@ extension Bolus {
             // The actual glucose threshold
             threshold = max(target - 0.5 * (target - 40 * conversion), threshold * conversion)
 
-            Getcarbs()
+            getCarbs()
             logMessage = "Carbs:\(selectedCarbData)"
             
             // Use either the eventual glucose prediction or just the Swift code
