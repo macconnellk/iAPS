@@ -124,10 +124,10 @@ extension Bolus {
             // The actual glucose threshold
             threshold = max(target - 0.5 * (target - 40 * conversion), threshold * conversion)
 
-            if let firstMeal = meal?.first {
-               let latestCarbValue = firstMeal.carbs
+            //if let firstMeal = meal?.first {
+               latestCarbValue = state.carbs
                logMessage = "Carbs:\(latestCarbValue)"
-             }
+            // }
 
             // Use either the eventual glucose prediction or just the Swift code
             if eventualBG {
