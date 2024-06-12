@@ -124,10 +124,15 @@ extension Bolus {
             // The actual glucose threshold
             threshold = max(target - 0.5 * (target - 40 * conversion), threshold * conversion)
 
-            //if let firstMeal = meal?.first {
-               latestCarbValue = state.carbs
-               logMessage = "Carbs:\(latestCarbValue)"
-            // }
+           
+               let selectedCarbData = DataTable.Treatment({
+                  units: units,
+                  type: .carbs, // Original type definition
+                  date: meals.actualDate ?? Date(), // Use actualDate if exists
+                  id: meals.id ?? "", // Include id for consistency (optional)
+                    });
+            
+               logMessage = "Carbs:\(selectedCarbData)"
 
             // Use either the eventual glucose prediction or just the Swift code
             if eventualBG {
