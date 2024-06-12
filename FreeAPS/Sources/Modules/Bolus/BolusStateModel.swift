@@ -71,7 +71,7 @@ extension Bolus {
         @Published var roundedLatestCarbEntryInsulin: Decimal = 0
         @Published var log_roundedWholeCalc: Decimal = 0
         @Published var wholeCalc_carbs: Decimal = 0
-        @Published var logMessage: String = ""
+        @Published var logMessage: String = "test"
         @Published var latestCarbValue: Decimal = 0
         @Published var carbs2: Decimal = 0
 
