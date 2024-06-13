@@ -74,7 +74,7 @@ extension Bolus {
         @Published var logMessage: String = "test"
         @Published var latestCarbValue: Decimal = 0
         @Published var carbs2: Decimal = 0
-        @Published var latestCarbEntry Decimal = 0
+        @Published var latestCarbEntry: Decimal = 0
 
 
         override func subscribe() {
