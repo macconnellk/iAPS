@@ -68,6 +68,11 @@ extension Bolus {
         @Published var eventualBG: Bool = false
         @Published var minimumPrediction: Bool = false
 
+        @FetchRequest(
+            entity: Meals.entity(),
+            sortDescriptors: [NSSortDescriptor(key: "createdAt", ascending: false)]
+        ) var Latestmeal: FetchedResults<Meals>
+        
         @Published var LatestCarbEntryInsulin: Decimal = 0
         @Published var roundedLatestCarbEntryInsulin: Decimal = 0
         @Published var log_roundedWholeCalc: Decimal = 0
@@ -122,36 +127,7 @@ extension Bolus {
         }
 
 
-            func fetchMeals() {
-                let fetchRequest: NSFetchRequest<Meal> = NSFetchRequest<Meal>(entityName: "Meal")
-                fetchRequest.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
-
-                do {
-                    meals = try managedObjectContext.fetch(fetchRequest)
-                } catch {
-                    logMessage = "No Meals Fetched"
-                }
-            }
-
-            func getLatestCarbEntry() -> Decimal {
-                  latestCarbEntry = 1
-                  let stateModel = StateModel(managedObjectContext: managedObjectContext)
-                   stateModel.fetchMeals()
-                // Access carbs data from the Bolus.StateModel instance
-                  if let carbsData = stateModel.meals.first {
-                    latestCarbEntry = 2
-                    // Check if there's any data available
-                    if !carbsData.isEmpty {
-                      // Assuming carbs data is sorted by date in descending order, access the first entry (most recent)
-                      latestCarbEntry = carbsData[0].carbs
-                    }
-                  }
-                  logMessage = "Carbs:\(latestCarbEntry)"
-                  // Return the latest carb entry value
-                  return latestCarbEntry
-                }
-        
-        func calculateInsulin() -> Decimal {
+        func calculateInsulin(carbs2: Decimal) -> Decimal {
             let conversion: Decimal = units == .mmolL ? 0.0555 : 1
             // The actual glucose threshold
             threshold = max(target - 0.5 * (target - 40 * conversion), threshold * conversion)
@@ -168,7 +144,7 @@ extension Bolus {
             }
 
             // more or less insulin because of bg trend in the last 15 minutes
-            fifteenMinInsulin = isf == 0 ? 0 : (deltaBG * conversion) / isf
+            // fifteenMinInsulin = isf == 0 ? 0 : (deltaBG * conversion) / isf
 
             // determine whole COB for which we want to dose insulin for and then determine insulin for wholeCOB
             wholeCobInsulin = carbRatio != 0 ? cob / carbRatio : 0
@@ -190,6 +166,37 @@ extension Bolus {
                 }
             }
 
+            if carbs2 > 0 {      
+                
+                // For max_cob = 60   
+                if carbs2 >= 60 {
+                   //calculate insulin for latest carb entry
+                    LatestCarbEntryInsulin = 60 / carbRatio
+                    wholeCalc_carbs = LatestCarbEntryInsulin 
+                } else {  
+                    //calculate insulin for latest carb entry
+                    LatestCarbEntryInsulin = carbs2 / carbRatio
+                    wholeCalc_carbs = LatestCarbEntryInsulin
+                }   
+                 
+                // logging and rounding LatestCarbEntryInsulin and wholecalc
+                let LatestCarbEntryInsulinAsDouble = Double(LatestCarbEntryInsulin)
+                roundedLatestCarbEntryInsulin = Decimal(round(100 * LatestCarbEntryInsulinAsDouble) / 100)
+                let Log_wholeCalcAsDouble = Double(wholeCalc)
+                log_roundedWholeCalc = Decimal(round(100 * Log_wholeCalcAsDouble) / 100)
+                logMessage = "Carbs:\(carbs2) -> \(roundedLatestCarbEntryInsulin)\nwholeCalc:\(log_roundedWholeCalc)"
+
+            
+                wholeCalc = min(wholeCalc, wholeCalc_carbs)
+                
+           } else {
+                logMessage = "\nNo New Carbs (carbs2=0)"
+            }
+            
+            // rounding
+            let wholeCalcAsDouble = Double(wholeCalc)
+            roundedWholeCalc = Decimal(round(100 * wholeCalcAsDouble) / 100)
+            
             // apply custom factor at the end of the calculations
             let result = !eventualBG ? wholeCalc * fraction : insulin * fraction
 
@@ -254,10 +261,15 @@ extension Bolus {
                 }
 
                 if self.useCalc {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(10)) {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(5)) {
                     self.getDeltaBG()
-                    self.latestCarbEntry = self.getLatestCarbEntry()
-                    self.insulinCalculated = self.roundBolus(max(self.calculateInsulin(), 0))
+                    if carbs2 > 0 {
+                        self.insulinCalculated = self.roundBolus(max(self.calculateInsulin(carbs2: Decimal(carbs2)), 0))
+                    } else {
+                        // Provide a default value for carbs if necessary
+                        let carbs2 = 0
+                        self.insulinCalculated = self.roundBolus(max(self.calculateInsulin(carbs2: Decimal(carbs2)), 0))
+                        }     
                     self.prepareData()
                     }    
                 }
