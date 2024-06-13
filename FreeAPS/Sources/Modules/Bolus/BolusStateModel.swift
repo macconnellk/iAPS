@@ -141,7 +141,12 @@ extension Bolus {
                 } else { insulin = 0 }
             } else {
                 let targetDifference = currentBG - target
+                if currentBG > 140 {
+                targetDifferenceInsulin = isf == 0 ? 0 : (targetDifference / isf)/2
+                }
+                if currentBG > 160 {
                 targetDifferenceInsulin = isf == 0 ? 0 : targetDifference / isf
+                }
             }
 
             // more or less insulin because of bg trend in the last 15 minutes
@@ -151,7 +156,9 @@ extension Bolus {
             wholeCobInsulin = carbRatio != 0 ? cob / carbRatio : 0
 
             // determine how much the calculator reduces/ increases the bolus because of IOB
+            if iob > 0 {
             iobInsulinReduction = (-1) * iob
+            }
 
             // adding everything together
             // add a calc for the case that no fifteenMinInsulin is available
@@ -187,7 +194,6 @@ extension Bolus {
                 log_roundedWholeCalc = Decimal(round(100 * Log_wholeCalcAsDouble) / 100)
                 logMessage = "Carbs:\(carbs2) -> \(roundedLatestCarbEntryInsulin)\nwholeCalc:\(log_roundedWholeCalc)"
 
-            
                 wholeCalc = min(wholeCalc, wholeCalc_carbs)
                 
            } else {
@@ -211,6 +217,7 @@ extension Bolus {
             // A blend of Oref0 predictions and the Swift calculator {
             if minimumPrediction, minPredBG < threshold {
                 if eventualBG { insulin = 0 }
+                
                 return 0
             }
 
