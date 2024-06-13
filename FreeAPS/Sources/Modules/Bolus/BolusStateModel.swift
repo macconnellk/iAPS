@@ -77,7 +77,6 @@ extension Bolus {
         @Published var carbs2: Decimal = 0
         @Published var latestCarbEntry: Decimal = 0
 
-        let myCalcmeal: FetchedResults<Meals>
         
         override func subscribe() {
             setupInsulinRequired()
