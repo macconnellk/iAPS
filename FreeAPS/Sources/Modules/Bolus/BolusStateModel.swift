@@ -49,6 +49,7 @@ extension Bolus {
         @Published var wholeCobInsulin: Decimal = 0
         @Published var iobInsulinReduction: Decimal = 0
         @Published var wholeCalc: Decimal = 0
+        @Published var roundedWholeCalc: Decimal = 0
         @Published var insulinCalculated: Decimal = 0
         @Published var roundedInsulinCalculated: Decimal = 0
         @Published var fraction: Decimal = 0
