@@ -173,7 +173,9 @@ extension Bolus {
                     wholeCalc = (targetDifferenceInsulin + iobInsulinReduction + wholeCobInsulin)
                 }
             }
-
+                
+            logMessage = "CR:\(carbRatio): COB\(cob):"
+            
             if carbs2 > 0 {      
                 
                 // For max_cob = 60   
@@ -192,12 +194,12 @@ extension Bolus {
                 roundedLatestCarbEntryInsulin = Decimal(round(100 * LatestCarbEntryInsulinAsDouble) / 100)
                 let Log_wholeCalcAsDouble = Double(wholeCalc)
                 log_roundedWholeCalc = Decimal(round(100 * Log_wholeCalcAsDouble) / 100)
-                logMessage = "Carbs:\(carbs2) -> \(roundedLatestCarbEntryInsulin)\nwholeCalc:\(log_roundedWholeCalc)"
+                logMessage += ":New Carbs:\(carbs2) -> \(roundedLatestCarbEntryInsulin)\nwholeCalc:\(log_roundedWholeCalc)"
 
                 wholeCalc = min(wholeCalc, wholeCalc_carbs)
                 
            } else {
-                logMessage = "\nNo New Carbs (carbs2=0)"
+                logMessage += "\nNo New Carbs (carbs2=0)"
             }
             
             // rounding
@@ -217,7 +219,7 @@ extension Bolus {
             // A blend of Oref0 predictions and the Swift calculator {
             if minimumPrediction, minPredBG < threshold {
                 if eventualBG { insulin = 0 }
-                
+                logMessage = "Prediction under threshold"
                 return 0
             }
 
