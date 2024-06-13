@@ -239,10 +239,12 @@ extension Bolus {
                 }
 
                 if self.useCalc {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(1)) {
                     self.getDeltaBG()
                     self.latestCarbEntry = self.getLatestCarbEntry()
                     self.insulinCalculated = self.roundBolus(max(self.calculateInsulin(), 0))
                     self.prepareData()
+                    ]    
                 }
             }
         }
