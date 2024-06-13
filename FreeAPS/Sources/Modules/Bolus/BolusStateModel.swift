@@ -240,7 +240,7 @@ extension Bolus {
 
                 if self.useCalc {
                     self.getDeltaBG()
-                    self.latestCarbEntry = getLatestCarbEntry()
+                    self.latestCarbEntry = self.getLatestCarbEntry()
                     self.insulinCalculated = self.roundBolus(max(self.calculateInsulin(), 0))
                     self.prepareData()
                 }
