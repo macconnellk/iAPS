@@ -1,6 +1,7 @@
 import LoopKit
 import SwiftUI
 import Swinject
+import CoreData
 
 extension Bolus {
     final class StateModel: BaseStateModel<Provider> {
@@ -122,10 +123,23 @@ extension Bolus {
         }
 
 
+            func fetchMeals() {
+                let fetchRequest: NSFetchRequest<Meal> = NSFetchRequest<Meal>(entityName: "Meal")
+                fetchRequest.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+
+                do {
+                    meals = try managedObjectContext.fetch(fetchRequest)
+                } catch {
+                    logMessage = "No Meals Fetched"
+                }
+            }
+
             func getLatestCarbEntry() -> Decimal {
                   latestCarbEntry = 1
-                  // Access carbs data from the Bolus.StateModel instance
-                  if let carbsData = self.myCalcmeal {
+                  let stateModel = StateModel(managedObjectContext: managedObjectContext)
+                   stateModel.fetchMeals()
+                // Access carbs data from the Bolus.StateModel instance
+                  if let carbsData = stateModel.meals.first {
                     latestCarbEntry = 2
                     // Check if there's any data available
                     if !carbsData.isEmpty {
