@@ -76,7 +76,7 @@ extension Bolus {
         @Published var carbs2: Decimal = 0
         @Published var latestCarbEntry: Decimal = 0
 
-        let meal: FetchedResults<Meals>
+        let myCalcmeal: FetchedResults<Meals>
         
         override func subscribe() {
             setupInsulinRequired()
@@ -125,7 +125,7 @@ extension Bolus {
             func getLatestCarbEntry() -> Decimal {
                   latestCarbEntry = 1
                   // Access carbs data from the Bolus.StateModel instance
-                  if let carbsData = self.meal {
+                  if let carbsData = self.myCalcmeal {
                     latestCarbEntry = 2
                     // Check if there's any data available
                     if !carbsData.isEmpty {
