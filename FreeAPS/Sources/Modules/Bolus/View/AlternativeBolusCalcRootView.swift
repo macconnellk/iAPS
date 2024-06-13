@@ -217,7 +217,13 @@ extension Bolus {
                 configureView {
                     state.waitForSuggestionInitial = waitForSuggestion
                     state.waitForSuggestion = waitForSuggestion
-                    state.insulinCalculated = state.calculateInsulin()
+                    if let carbs2 = meal.first?.carbs, carbs2 > 0 {
+                        state.insulinCalculated = state.calculateInsulin(carbs2: Decimal(carbs2))
+                    } else {
+                        // Provide a default value for carbs if necessary
+                        let carbs2 = 0
+                        state.insulinCalculated = state.calculateInsulin(carbs2: Decimal(carbs2))
+                        }    
                 }
             }
             .onDisappear {
