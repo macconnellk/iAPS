@@ -76,7 +76,8 @@ extension Bolus {
         @Published var carbs2: Decimal = 0
         @Published var latestCarbEntry: Decimal = 0
 
-
+        let meal: FetchedResults<Meals>
+        
         override func subscribe() {
             setupInsulinRequired()
             broadcaster.register(SuggestionObserver.self, observer: self)
