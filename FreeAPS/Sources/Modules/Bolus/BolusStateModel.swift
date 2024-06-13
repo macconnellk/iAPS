@@ -122,9 +122,10 @@ extension Bolus {
 
 
             func getLatestCarbEntry() -> Decimal {
-                  
+                  latestCarbEntry = 1
                   // Access carbs data from the Bolus.StateModel instance
                   if let carbsData = self.meal {
+                    latestCarbEntry = 2
                     // Check if there's any data available
                     if !carbsData.isEmpty {
                       // Assuming carbs data is sorted by date in descending order, access the first entry (most recent)
