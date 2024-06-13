@@ -262,17 +262,10 @@ extension Bolus {
                 }
 
                 if self.useCalc {
-                    DispatchQueue.main.asyncAfter(deadline: .now() + .seconds(5)) {
                     self.getDeltaBG()
-                    // if carbs2 > 0 {
-                    //     self.insulinCalculated = self.roundBolus(max(self.calculateInsulin(carbs2: Decimal(carbs2)), 0))
-                   //  } else {
-                        // Provide a default value for carbs if necessary
-                    //    let carbs2 = 0
-                    //    self.insulinCalculated = self.roundBolus(max(self.calculateInsulin(carbs2: Decimal(carbs2)), 0))
-                    //    }     
+                    self.insulinCalculated = 0   
                     self.prepareData()
-                    }    
+                        
                 }
             }
         }
