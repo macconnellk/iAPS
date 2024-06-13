@@ -86,6 +86,8 @@ extension Bolus {
                                 .font(.footnote)
                                 .buttonStyle(PlainButtonStyle())
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                            
+                            // Highjackig Fatty Meals Functionality to enable calculation of insulin using latest carbs or COB
                             if state.fattyMeals {
                                 Spacer()
                                 Toggle(isOn: $state.useFattyMealCorrectionFactor) {
@@ -99,7 +101,7 @@ extension Bolus {
                                     } else {
                                       let carbs2 = 0  
                                       state.insulinCalculated = state.calculateInsulin(carbs2: Decimal(carbs2))
-                                }   
+                                    }   
                                 }
                             }
                         }
