@@ -244,7 +244,7 @@ extension Bolus {
                     self.latestCarbEntry = self.getLatestCarbEntry()
                     self.insulinCalculated = self.roundBolus(max(self.calculateInsulin(), 0))
                     self.prepareData()
-                    ]    
+                    }    
                 }
             }
         }
