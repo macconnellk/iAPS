@@ -122,9 +122,7 @@ extension Bolus {
 
 
             func getLatestCarbEntry() -> Decimal {
-                  // Initialize variables
-                  var latestCarbEntry: Decimal = 0
-  
+                  
                   // Access carbs data from the Bolus.StateModel instance
                   if let carbsData = self.meal {
                     // Check if there's any data available
@@ -133,7 +131,7 @@ extension Bolus {
                       latestCarbEntry = carbsData[0].carbs
                     }
                   }
-  
+                  logMessage = "Carbs:\(latestCarbEntry)"
                   // Return the latest carb entry value
                   return latestCarbEntry
                 }
@@ -143,9 +141,6 @@ extension Bolus {
             // The actual glucose threshold
             threshold = max(target - 0.5 * (target - 40 * conversion), threshold * conversion)
 
-            let latestCarbs = getLatestCarbEntry()
-            logMessage = "Carbs:\(latestCarbEntry)"
-            
             // Use either the eventual glucose prediction or just the Swift code
             if eventualBG {
                 if evBG > target {
@@ -245,6 +240,7 @@ extension Bolus {
 
                 if self.useCalc {
                     self.getDeltaBG()
+                    self.latestCarbEntry = getLatestCarbEntry()
                     self.insulinCalculated = self.roundBolus(max(self.calculateInsulin(), 0))
                     self.prepareData()
                 }
