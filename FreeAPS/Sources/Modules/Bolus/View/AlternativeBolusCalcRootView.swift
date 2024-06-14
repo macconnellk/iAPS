@@ -106,11 +106,6 @@ extension Bolus {
                             }
                         }
 
-                        HStack {
-                            let logMessage = state.logMessage
-                            Text("Log " + (logMessage.isEmpty ? "" : "(\(logMessage))"))
-                        }
-                        
                     }
 
                     if state.waitForSuggestion {
@@ -146,6 +141,7 @@ extension Bolus {
                         )
                         Text(exceededMaxBolus ? "😵" : " U").foregroundColor(.secondary)
                     }
+                    
                     .focused($isFocused)
                     .onChange(of: state.amount) { newValue in
                         if newValue > state.maxBolus {
@@ -197,6 +193,10 @@ extension Bolus {
                         .frame(maxWidth: .infinity, alignment: .center)
                         .listRowBackground(Color(.systemBlue))
                         .tint(.white)
+                        HStack {
+                            let logMessage = state.logMessage
+                            Text("Calcs: " + (logMessage.isEmpty ? "" : "(\(logMessage))"))
+                        }
                     }
                 }
             }
