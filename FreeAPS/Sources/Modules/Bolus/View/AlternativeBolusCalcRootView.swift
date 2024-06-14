@@ -98,16 +98,21 @@ extension Bolus {
                                 .onChange(of: state.useFattyMealCorrectionFactor) { _ in 
                                     //If new carbs have been entered in the last 3 minutes
                                     if let firstMeal = meal.first,
-                                       let createdAt = firstMeal.createdAt,
-                                       Date().timeIntervalSince(createdAt) < 180 {      // 180 seconds = 3 minutes
-                                       if let carbs2 = firstMeal.carbs, carbs2 > 0 {
-                                            state.insulinCalculated = state.calculateInsulin(carbs2: Decimal(carbs2))
-                                          } 
-                                        } else {
-                                       let carbs2 = 0
-                                        state.insulinCalculated = state.calculateInsulin(carbs2: Decimal(carbs2))
+                                           let createdAt = firstMeal.createdAt,
+                                           Date().timeIntervalSince(createdAt) < 180 {      // 180 seconds = 3 minutes
+                                               if let carbs2 = firstMeal.carbs, carbs2 > 0 {
+                                                state.insulinCalculated = state.calculateInsulin(carbs2: Decimal(carbs2))
+                                              } 
+                                               else {
+                                                   let carbs2 = 0
+                                                state.insulinCalculated = state.calculateInsulin(carbs2: Decimal(carbs2))
+                                                } 
+                                       } 
+                                        else {
+                                               let carbs2 = 0
+                                                state.insulinCalculated = state.calculateInsulin(carbs2: Decimal(carbs2))
                                         } 
-                                }
+                                 
                             }
                         }
 
