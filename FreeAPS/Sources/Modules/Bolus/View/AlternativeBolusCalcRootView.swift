@@ -96,12 +96,17 @@ extension Bolus {
                                 .toggleStyle(CheckboxToggleStyle())
                                 .font(.footnote)
                                 .onChange(of: state.useFattyMealCorrectionFactor) { _ in
-                                    if let carbs2 = meal.first?.carbs, carbs2 > 0  {
+                                    //If new carbs have been entered in the last 3 minutes
+                                    if let firstMeal = meals.first,
+                                       let createdAt = firstMeal.createdAt,
+                                       Date().timeIntervalSince(createdAt) < 180 {      // 180 seconds = 3 minutes
+                                       if let carbs2 = firstMeal.carbs, carbs2 > 0 {
                                             state.insulinCalculated = state.calculateInsulin(carbs2: Decimal(carbs2))
-                                    } else {
-                                      let carbs2 = 0  
-                                      state.insulinCalculated = state.calculateInsulin(carbs2: Decimal(carbs2))
-                                    }   
+                                          } 
+                                        } else {
+                                       let carbs2 = 0
+                                        state.insulinCalculated = state.calculateInsulin(carbs2: Decimal(carbs2))
+                                        } 
                                 }
                             }
                         }
