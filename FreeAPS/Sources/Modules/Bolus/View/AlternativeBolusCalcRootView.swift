@@ -26,7 +26,7 @@ extension Bolus {
 
         let meal: FetchedResults<Meals>
         let mealEntries: any View
-        let viewlogMessage = ""
+        var viewlogMessage = ""
 
         private var formatter: NumberFormatter {
             let formatter = NumberFormatter()
