@@ -96,7 +96,7 @@ extension Bolus {
                                 .toggleStyle(CheckboxToggleStyle())
                                 .font(.footnote)
                                 .onChange(of: state.useFattyMealCorrectionFactor) { _ in
-                                    let viewlogMessage = state.logMessage
+                                    let logMessage = state.logMessage
                                     //If new carbs have been entered in the last 3 minutes
                                     if let firstMeal = meal.first,
                                        let createdAt = firstMeal.createdAt,
@@ -200,7 +200,7 @@ extension Bolus {
                         .listRowBackground(Color(.systemBlue))
                         .tint(.white)
                         HStack {  
-                            Text("Calcs: " + (viewlogMessage.isEmpty ? "" : "(\(viewlogMessage))"))
+                            Text("Calcs: " + (logMessage.isEmpty ? "" : "(\(logMessage))"))
                             .font(.system(size: 10)) // Adjust the font size here
                         }
                     }
