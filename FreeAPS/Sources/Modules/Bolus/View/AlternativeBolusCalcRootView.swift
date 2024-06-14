@@ -112,7 +112,7 @@ extension Bolus {
                                                let carbs2 = 0
                                                 state.insulinCalculated = state.calculateInsulin(carbs2: Decimal(carbs2))
                                         } 
-                                 
+                                 }
                             }
                         }
 
