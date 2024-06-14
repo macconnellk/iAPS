@@ -194,7 +194,7 @@ extension Bolus {
                 roundedLatestCarbEntryInsulin = Decimal(round(100 * LatestCarbEntryInsulinAsDouble) / 100)
                 let Log_wholeCalcAsDouble = Double(wholeCalc)
                 log_roundedWholeCalc = Decimal(round(100 * Log_wholeCalcAsDouble) / 100)
-                logMessage += "-->\wholeCalc:\(log_roundedWholeCalc)\n:New Carbs:\(carbs2) -> \(roundedLatestCarbEntryInsulin)"
+                logMessage += "--> COBCalc:\(log_roundedWholeCalc)\n:New Carbs:\(carbs2) -> \(roundedLatestCarbEntryInsulin)"
 
                 wholeCalc = min(wholeCalc, wholeCalc_carbs)
                 
