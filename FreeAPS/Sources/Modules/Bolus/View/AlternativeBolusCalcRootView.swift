@@ -26,7 +26,6 @@ extension Bolus {
 
         let meal: FetchedResults<Meals>
         let mealEntries: any View
-        var viewlogMessage = ""
 
         private var formatter: NumberFormatter {
             let formatter = NumberFormatter()
@@ -97,7 +96,7 @@ extension Bolus {
                                 .toggleStyle(CheckboxToggleStyle())
                                 .font(.footnote)
                                 .onChange(of: state.useFattyMealCorrectionFactor) { _ in
-                                    viewlogMessage = state.logMessage
+                                    let viewlogMessage = state.logMessage
                                     //If new carbs have been entered in the last 3 minutes
                                     if let firstMeal = meal.first,
                                        let createdAt = firstMeal.createdAt,
