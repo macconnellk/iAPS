@@ -174,7 +174,7 @@ extension Bolus {
                 }
             }
                 
-            logMessage = "CR:\(carbRatio): COB\(cob):"
+            logMessage = "CR: \(carbRatio). \nCOB \(cob): "
             
             if carbs2 > 0 {      
                 
@@ -194,7 +194,7 @@ extension Bolus {
                 roundedLatestCarbEntryInsulin = Decimal(round(100 * LatestCarbEntryInsulinAsDouble) / 100)
                 let Log_wholeCalcAsDouble = Double(wholeCalc)
                 log_roundedWholeCalc = Decimal(round(100 * Log_wholeCalcAsDouble) / 100)
-                logMessage += ":New Carbs:\(carbs2) -> \(roundedLatestCarbEntryInsulin)\nwholeCalc:\(log_roundedWholeCalc)"
+                logMessage += "-->\wholeCalc:\(log_roundedWholeCalc)\n:New Carbs:\(carbs2) -> \(roundedLatestCarbEntryInsulin)"
 
                 wholeCalc = min(wholeCalc, wholeCalc_carbs)
                 
