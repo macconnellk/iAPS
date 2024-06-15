@@ -199,7 +199,7 @@ extension Bolus {
                         HStack {  
                             let logMessage = state.logMessage
                             Text("Calcs: " + (logMessage.isEmpty ? "" : "(\(logMessage))"))
-                            .font(.system(size: 10)) // Adjust the font size here
+                            .font(.system(size: 11)) // Adjust the font size here
                         }
                     }
                 }
