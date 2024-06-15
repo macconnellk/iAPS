@@ -220,8 +220,14 @@ extension Bolus {
             // A blend of Oref0 predictions and the Swift calculator {
             if minimumPrediction, minPredBG < threshold {
                 if eventualBG { insulin = 0 }
-                logMessage = "Prediction under threshold"
-                return 0
+                
+                // return 0
+                if currentBG < 140 {
+                insulinCalculated / 2
+                logMessage += "\nPrediction<threshold. 1/2 bolus, set timer"    
+                } else {
+                logMessage += "\nPrediction<threshold. BG>140, no change"    
+                }
             }
 
             // Account for increments (Don't use the apsManager function as that gets much too slow)
