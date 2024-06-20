@@ -93,7 +93,7 @@ extension Bolus {
             minimumPrediction = settingsManager.settings.minumimPrediction
             threshold = settingsManager.preferences.threshold_setting
             maxBolus = provider.pumpSettings().maxBolus
-            maxCOB = settings.profile.maxCOB
+            maxCOB = settings.preferences.maxCOB
             // added
             fraction = settings.settings.overrideFactor
             useCalc = settings.settings.useCalc
