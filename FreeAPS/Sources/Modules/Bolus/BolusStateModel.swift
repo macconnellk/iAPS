@@ -23,6 +23,7 @@ extension Bolus {
         @Published var percentage: Decimal = 0
         @Published var threshold: Decimal = 0
         @Published var maxBolus: Decimal = 0
+        @Published var maxCOB: Decimal = 0
         @Published var errorString: Decimal = 0
         @Published var evBG: Decimal = 0
         @Published var insulin: Decimal = 0
@@ -92,6 +93,7 @@ extension Bolus {
             minimumPrediction = settingsManager.settings.minumimPrediction
             threshold = settingsManager.preferences.threshold_setting
             maxBolus = provider.pumpSettings().maxBolus
+            maxCOB = settings.profile.maxCOB
             // added
             fraction = settings.settings.overrideFactor
             useCalc = settings.settings.useCalc
@@ -142,7 +144,7 @@ extension Bolus {
                 } else { insulin = 0 }
             } else {
                 let targetDifference = currentBG - target
-                if currentBG > 140 {
+                if currentBG > 120 {
                 targetDifferenceInsulin = isf == 0 ? 0 : (targetDifference / isf)/2
                 }
                 if currentBG > 160 {
@@ -179,10 +181,10 @@ extension Bolus {
             
             if carbs2 > 0 {      
                 
-                // For max_cob = 60   
-                if carbs2 >= 60 {
+                // For max_cob   
+                if carbs2 >= maxCOB {
                    //calculate insulin for latest carb entry
-                    LatestCarbEntryInsulin = 60 / carbRatio
+                    LatestCarbEntryInsulin = maxCOB / carbRatio
                     wholeCalc_carbs = LatestCarbEntryInsulin 
                 } else {  
                     //calculate insulin for latest carb entry
