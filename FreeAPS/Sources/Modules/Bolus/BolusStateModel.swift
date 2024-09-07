@@ -203,6 +203,7 @@ extension Bolus {
                 
            } else {
                 logMessage += "\nNo New Carbs (carbs2=0)"
+                wholeCalc = 0
             }
             
             // rounding
