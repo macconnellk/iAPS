@@ -28,9 +28,9 @@ function generate(iob, currenttemp, glucose, profile, autosens = null, meal = nu
             // ISF and CR
             if (dynamicVariables.isfAndCr) {
                 profile.sense /= factor;
-                profile.carb_ratio /= factor;
+                profile.carb_ratio =  round(profile.carb_ratio / factor, 1);
             } else {
-                if (dynamicVariables.cr) { profile.carb_ratio /= factor; }
+                if (dynamicVariables.cr) { profile.carb_ratio =  round(profile.carb_ratio / factor, 1); }
                 if (dynamicVariables.isf) { profile.sens /= factor; }
             }
             console.log("Override Active, " + dynamicVariables.overridePercentage + "%");
@@ -87,6 +87,11 @@ function generate(iob, currenttemp, glucose, profile, autosens = null, meal = nu
     }
     var glucose_status = freeaps_glucoseGetLast(glucose);
     
+    // In case Basal Rate been set in midleware
+    if (profile.set_basal && profile.basal_rate) {
+        console.log("Basal Rate set by middleware to " + profile.basal_rate + " U/h.");
+    }
+    
     return freeaps_determineBasal(glucose_status, currenttemp, iob, profile, autosens_data, meal_data, freeaps_basalSetTemp, microbolusAllowed, reservoir_data, clock);
 }
 
@@ -94,6 +99,7 @@ function generate(iob, currenttemp, glucose, profile, autosens = null, meal = nu
 function dynisf(profile, autosens_data, dynamicVariables, glucose) {
     console.log("Starting dynamic ISF layer.");
     var dynISFenabled = true;
+    
     // One of two exercise settings (they share the same purpose).
     var exerciseSetting = false;
     if (profile.highTemptargetRaisesSensitivity || profile.exerciseMode || dynamicVariables.isEnabled) {
@@ -158,7 +164,7 @@ function dynisf(profile, autosens_data, dynamicVariables, glucose) {
     }
 
     // Account for TDD of insulin. Compare last 2 hours with total data (up to 10 days)
-    const tdd_factor = weighted_average / average14; // weighted average TDD / total data average TDD
+    var tdd_factor = weighted_average / average14; // weighted average TDD / total data average TDD
     
     const enable_sigmoid = profile.sigmoid;
     var newRatio = 1;
@@ -202,7 +208,7 @@ function dynisf(profile, autosens_data, dynamicVariables, glucose) {
         console.log(", Dynamic ISF limited by autosens_max setting to: " + autosens_max + ", from: " + newRatio);
         newRatio = autosens_max;
     } else if (newRatio < autosens_min) {
-        console.log("Dynamic ISF limited by autosens_min setting to: " + autosens_min + ", from: " + newRatio);
+        console.log(", Dynamic ISF limited by autosens_min setting to: " + autosens_min + ", from: " + newRatio);
         newRatio = autosens_min;
     }
 
@@ -224,7 +230,7 @@ function dynisf(profile, autosens_data, dynamicVariables, glucose) {
     // Basal Adjustment
     if (profile.tddAdjBasal && dynISFenabled) {
         profile.current_basal *= tdd_factor;
-        console.log("Dynamic ISF. Basal adjusted with TDD factor: " + round(tdd_factor, 1));
+        console.log("Dynamic ISF. Basal adjusted with TDD factor: " + round(tdd_factor, 2));
     }
 }
 

@@ -61,7 +61,9 @@ extension StatConfig {
                 footer: { Text("In case you're using both profiles and temp targets") }
 
                 Section {
+                    Toggle("Never display the small glucose chart when scrolling", isOn: $state.skipGlucoseChart)
                     Toggle("Always Color Glucose Value (green, yellow etc)", isOn: $state.alwaysUseColors)
+                    Toggle("Display Glucose Delta", isOn: $state.displayDelta)
                 } header: { Text("Header settings") }
                 footer: { Text("Normally glucose is colored red only when over or under your notification limits for high/low") }
 
@@ -85,6 +87,7 @@ extension StatConfig {
                 Section {
                     Toggle("Skip Bolus screen after carbs", isOn: $state.skipBolusScreenAfterCarbs)
                     Toggle("Display and allow Fat and Protein entries", isOn: $state.useFPUconversion)
+                    Toggle("Disable Hypo Treatments", isOn: $state.disableHypoTreatment)
                 } header: { Text("Add Meal View settings ") }
             }
             .dynamicTypeSize(...DynamicTypeSize.xxLarge)
