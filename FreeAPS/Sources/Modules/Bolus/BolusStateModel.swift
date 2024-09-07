@@ -202,7 +202,7 @@ extension Bolus {
                 wholeCalc = min(wholeCalc, wholeCalc_carbs)
                 
            } else {
-                logMessage += "\nNo New Carbs (carbs2=0)"
+                logMessage += "\nNo New Carbs "
                 wholeCalc = 0
             }
             
