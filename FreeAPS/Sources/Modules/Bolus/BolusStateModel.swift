@@ -30,6 +30,7 @@ extension Bolus {
         @Published var isf: Decimal = 0
         @Published var error: Bool = false
         @Published var minPredBG: Decimal = 0
+        @Published var minGuardBG: Decimal = 0
         @Published var minDelta: Decimal = 0
         @Published var expectedDelta: Decimal = 0
         @Published var waitForSuggestion: Bool = false
@@ -217,7 +218,7 @@ extension Bolus {
                 wholeCalc = min(wholeCalc, wholeCalc_carbs)
                 
            } else {
-                logMessage += "\nNo New Carbs. Recommendation Disabled, would be\(wholeCalc)"
+                logMessage += "\nNo New Carbs. Recommendation Disabled, would be \(wholeCalc)"
                 wholeCalc = 0
             }
             
@@ -237,17 +238,27 @@ extension Bolus {
 
             // A blend of Oref0 predictions and the Swift calculator {
             if minimumPrediction, minPredBG < threshold {
-                if eventualBG { insulin = 0 }
+                    if eventualBG { insulin = 0 }
+                    // return 0
                 
-                // return 0
-                
-                if minPredBG >= threshold - 10 {
-                insulinCalculated = insulinCalculated * 0.7
-                logMessage += "\nPrediction < threshold mild, 70% bolus"    
-                } else {
-                insulinCalculated = insulinCalculated * 0.5
-                logMessage += "\nPrediction < threshold signif, 50% bolus"
-                }
+                    if minPredBG >= threshold - 10 {
+                    insulinCalculated = insulinCalculated * 0.7
+                    logMessage += "\nPrediction < threshold mild\(minPredBG), 70% bolus"    
+                    } else {
+                    insulinCalculated = insulinCalculated * 0.5
+                    logMessage += "\nPrediction < threshold signif\(minPredBG), 50% bolus"
+                    } 
+            } else {  
+                if minimumPrediction, minGuardBG < threshold {
+                    
+                    if minGuardBG >= threshold - 10 {
+                    insulinCalculated = insulinCalculated * 0.8
+                    logMessage += "\minGuard < threshold mild\(minGuardBG), 80% bolus"    
+                    } else {
+                    insulinCalculated = insulinCalculated * 0.5
+                    logMessage += "\minGuard < threshold signif\(minGuardBG), 60% bolus"
+                    } 
+                } 
             }
 
             // Account for increments (Don't use the apsManager function as that gets much too slow)
@@ -289,12 +300,13 @@ extension Bolus {
                 }
                 // Unwrap. We can't have NaN values.
                 if let reasons = CoreDataStorage().fetchReason(), let target = reasons.target, let isf = reasons.isf,
-                   let carbRatio = reasons.cr, let minPredBG = reasons.minPredBG
+                   let carbRatio = reasons.cr, let minPredBG = reasons.minPredBG, let minGuardBG = reasons.minGuardBG
                 {
                     self.target = target as Decimal
                     self.isf = isf as Decimal
                     self.carbRatio = carbRatio as Decimal
                     self.minPredBG = minPredBG as Decimal
+                    self.minGuardBG = minGuardBG as Decimal
                 }
 
                 if self.useCalc {
