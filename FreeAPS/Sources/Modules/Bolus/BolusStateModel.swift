@@ -240,14 +240,13 @@ extension Bolus {
                 if eventualBG { insulin = 0 }
                 
                 // return 0
-                logMessage += "\nPrediction<threshold. BG>140, no change"
-                if currentBG < 140 {
-                insulinCalculated = insulinCalculated / 2
-                logMessage += "\nPrediction<threshold. BG<140, 1/2 bolus, set timer"    
+                
+                if currentBG > 120 {
+                logMessage += "\nPrediction < threshold. BG>120, No change"    
                 } 
-                if currentBG < 100 {
-                insulinCalculated = insulinCalculated / 4
-                logMessage += "\nPrediction<threshold. BG<100, 1/4 bolus, set timer"    
+                if currentBG <= 120 {
+                insulinCalculated = insulinCalculated / 2
+                logMessage += "\nPrediction < threshold. BG<120, 1/2 bolus"    
                 } 
             }
 
