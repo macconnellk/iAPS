@@ -97,7 +97,8 @@ extension Bolus {
                                 .toggleStyle(CheckboxToggleStyle())
                                 .font(.footnote)
                                 .onChange(of: state.useFattyMealCorrectionFactor) { _ in
-                                    state.insulinCalculated = state.calculateInsulin(carbs2: Decimal(carbs2))
+                                    //Disabling for custom code in Alternative Bolus Calc
+                                    //state.insulinCalculated = state.calculateInsulin()
                                 }
                             }
                         }
