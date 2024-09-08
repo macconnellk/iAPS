@@ -253,10 +253,10 @@ extension Bolus {
                     
                     if minGuardBG >= threshold - 10 {
                     insulinCalculated = insulinCalculated * 0.8
-                    logMessage += "\minGuard < threshold mild\(minGuardBG), 80% bolus"    
+                    logMessage += "\nminGuard < threshold mild\(minGuardBG), 80% bolus"    
                     } else {
                     insulinCalculated = insulinCalculated * 0.5
-                    logMessage += "\minGuard < threshold signif\(minGuardBG), 60% bolus"
+                    logMessage += "\nminGuard < threshold signif\(minGuardBG), 60% bolus"
                     } 
                 } 
             }
