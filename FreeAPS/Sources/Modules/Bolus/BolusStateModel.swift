@@ -242,10 +242,10 @@ extension Bolus {
                 // return 0
                 
                 if minPredBG >= threshold - 10 {
-                insulinCalculated = insulinCalculated * .7
+                insulinCalculated = insulinCalculated * 0.7
                 logMessage += "\nPrediction < threshold mild, 70% bolus"    
                 } else {
-                insulinCalculated = insulinCalculated * .5
+                insulinCalculated = insulinCalculated * 0.5
                 logMessage += "\nPrediction < threshold signif, 50% bolus"
                 }
             }
