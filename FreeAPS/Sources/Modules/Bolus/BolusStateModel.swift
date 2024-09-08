@@ -241,13 +241,13 @@ extension Bolus {
                 
                 // return 0
                 
-                if currentBG > 120 {
-                logMessage += "\nPrediction < threshold. BG>120, No change"    
-                } 
-                if currentBG <= 120 {
-                insulinCalculated = insulinCalculated / 2
-                logMessage += "\nPrediction < threshold. BG<120, 1/2 bolus"    
-                } 
+                if minPredBG >= threshold - 10 {
+                insulinCalculated = insulinCalculated * .7
+                logMessage += "\nPrediction < threshold mild, 70% bolus"    
+                } else {
+                insulinCalculated = insulinCalculated * .5
+                logMessage += "\nPrediction < threshold signif, 50% bolus"
+                }
             }
 
             // Account for increments (Don't use the apsManager function as that gets much too slow)
