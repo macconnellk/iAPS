@@ -239,23 +239,23 @@ extension Bolus {
            //LESS THAN THRESHOLD
             if minimumPrediction && (minPredBG < threshold || evBG < threshold) {
                     
-                    if (minPredBG >= threshold - 10 || evBG >= threshold - 10) {
-                    insulinCalculated = insulinCalculated * 0.80
-                    logMessage += "\nminPrediction\(minPredBG) or EventualBG\(evBG) < threshold, mild, 80% bolus"    
-                    } else {
+                    if (minPredBG <= threshold - 10 || evBG <= threshold - 10) {
                     insulinCalculated = insulinCalculated * 0.75
-                    logMessage += "\nminPrediction\(minPredBG) or EventualBG\(evBG) < threshold, signif, 75% bolus"
+                    logMessage += "\nminPrediction\(minPredBG) or EventualBG\(evBG) < threshold, signif, 75% bolus"    
+                    } else {
+                    insulinCalculated = insulinCalculated * 0.80
+                    logMessage += "\nminPrediction\(minPredBG) or EventualBG\(evBG) < threshold, signif, 80% bolus"
                     } 
             } else {
                 //LESS THAN TARGET-20mg/dl
                 if minimumPrediction && (minPredBG < (target-20) || evBG < (target-20)) {
 
-                    if (minPredBG >= (target-20) - 10 || evBG >= (target-20) - 10)  {
-                    insulinCalculated = insulinCalculated * 0.95
-                    logMessage += "\nminPrediction\(minPredBG) or EventualBG\(evBG) < targetminus20, mild, 95% bolus"    
+                    if (minPredBG <= (target-20) - 10 || evBG <= (target-20) - 10)  {
+                    insulinCalculated = insulinCalculated * 0.90
+                    logMessage += "\nminPrediction\(minPredBG) or EventualBG\(evBG) < targetminus20, mild, 90% bolus"    
                     } else {
-                    insulinCalculated = insulinCalculated * 0.9
-                    logMessage += "\nminPrediction\(minPredBG) or EventualBG\(evBG) < targetminus20, signif, 90% bolus"
+                    insulinCalculated = insulinCalculated * 0.95
+                    logMessage += "\nminPrediction\(minPredBG) or EventualBG\(evBG) < targetminus20, signif, 95% bolus"
                     } 
                 } 
             }
