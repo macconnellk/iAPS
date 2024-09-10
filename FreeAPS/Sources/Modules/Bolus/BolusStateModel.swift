@@ -251,11 +251,11 @@ extension Bolus {
                 if minimumPrediction && (minPredBG < (target-20) || evBG < (target-20)) {
 
                     if (minPredBG <= (target-20) - 10 || evBG <= (target-20) - 10)  {
-                    insulinCalculated = insulinCalculated * 0.90
-                    logMessage += "\nminPrediction\(minPredBG) or EventualBG\(evBG) < targetminus20, mild, 90% bolus"    
-                    } else {
                     insulinCalculated = insulinCalculated * 0.95
-                    logMessage += "\nminPrediction\(minPredBG) or EventualBG\(evBG) < targetminus20, signif, 95% bolus"
+                    logMessage += "\nminPrediction\(minPredBG) or EventualBG\(evBG) < targetminus20, mild, 95% bolus"    
+                    } else {
+                    insulinCalculated = insulinCalculated * 0.90
+                    logMessage += "\nminPrediction\(minPredBG) or EventualBG\(evBG) < targetminus20, signif, 90% bolus"
                     } 
                 } 
             }
