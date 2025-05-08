@@ -616,3 +616,28 @@ extension Bolus {
         }
     }
 }
+
+extension Bolus.StateModel: SuggestionObserver {
+    func suggestionDidUpdate(_: Suggestion) {
+        DispatchQueue.main.async {
+            self.waitForSuggestion = false
+        }
+        setupInsulinRequired()
+        // Recalculate insulin when suggestion updates
+        insulinCalculated = calculateInsulin()
+        loopDate = apsManager.lastLoopDate
+
+        if abs(now.timeIntervalSinceNow / 60) > loopReminder * 1.5 {
+            hideModal()
+            notActive()
+            debug(.apsManager, "Force Closing Bolus View", printToConsole: true)
+        }
+    }
+}
+
+extension Decimal {
+    /// Account for increments
+    func roundBolus(increment: Double) -> Decimal {
+        Decimal(round(Double(self) / increment)) * Decimal(increment)
+    }
+}
