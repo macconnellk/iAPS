@@ -8,12 +8,12 @@ extension Bolus {
         @Injected() var unlockmanager: UnlockManager!
         @Injected() var apsManager: APSManager!
         @Injected() var broadcaster: Broadcaster!
+        @Injected() var pumpHistoryStorage: PumpHistoryStorage!
         // added for bolus calculator
         @Injected() var settings: SettingsManager!
+        @Injected() var nsManager: NightscoutManager!
         @Injected() var announcementStorage: AnnouncementsStorage!
         @Injected() var carbsStorage: CarbsStorage!
-        @Injected() var pumpHistoryStorage: PumpHistoryStorage!
-        @Injected() var nsManager: NightscoutManager!
 
         @Published var suggestion: Suggestion?
         @Published var predictions: Predictions?
@@ -34,19 +34,18 @@ extension Bolus {
         @Published var minDelta: Decimal = 0
         @Published var expectedDelta: Decimal = 0
         @Published var waitForSuggestion: Bool = false
+        @Published var waitForCarbs: Bool = false
         @Published var carbRatio: Decimal = 0
 
         var waitForSuggestionInitial: Bool = false
-        @Published var waitForCarbs: Bool = false
 
         // added for bolus calculator
         @Published var recentGlucose: BloodGlucose?
-        @Published var target: Decimal = 100
+        @Published var target: Decimal = 0
         @Published var cob: Decimal = 0
         @Published var iob: Decimal = 0
-
-        @Published var currentBG: Decimal = 0
         @Published var manualGlucose: Decimal = 0
+        @Published var currentBG: Decimal = 0
         @Published var fifteenMinInsulin: Decimal = 0
         @Published var deltaBG: Decimal = 0
         @Published var targetDifferenceInsulin: Decimal = 0
@@ -66,8 +65,7 @@ extension Bolus {
         @Published var fattyMealFactor: Decimal = 0
         @Published var useFattyMealCorrectionFactor: Bool = false
         @Published var displayPredictions: Bool = true
-        
-        // Added for logging and enhanced calculation
+
         @Published var latestCarbEntryInsulin: Decimal = 0
         @Published var roundedLatestCarbEntryInsulin: Decimal = 0
         @Published var log_roundedWholeCalc: Decimal = 0
@@ -86,7 +84,6 @@ extension Bolus {
         @Published var belowThresholdInsulinReduction: Decimal = 0
         @Published var belowTargetInsulinReduction: Decimal = 0
         @Published var log_COBapproach: String = ""
-        @Published var mostRecentCarbEntryTime: Date = .distantPast
 
         @Published var meal: [CarbsEntry]?
         @Published var carbs: Decimal = 0
@@ -146,21 +143,14 @@ extension Bolus {
                                 self.waitForSuggestion = false
                                 self.insulinRequired = 0
                                 self.insulinRecommended = 0
-                            } else if let notNilSugguestion = provider.suggestion {
-                                suggestion = notNilSugguestion
-                                if let notNilPredictions = suggestion?.predictions {
-                                    predictions = notNilPredictions
-                                }
                             }
-                            // Calculate insulin after suggestion updates
-                            self.insulinCalculated = self.calculateInsulin()
                         }.store(in: &lifetime)
                     setupPumpData()
                     loopDate = apsManager.lastLoopDate
                 }
             }
-            if let notNilSugguestion = provider.suggestion {
-                suggestion = notNilSugguestion
+            if let notNilSuggestion = provider.suggestion {
+                suggestion = notNilSuggestion
                 if let notNilPredictions = suggestion?.predictions {
                     predictions = notNilPredictions
                 }
@@ -172,13 +162,12 @@ extension Bolus {
             guard let lastGlucose = glucose.first, glucose.count >= 4 else { return }
             deltaBG = Decimal(lastGlucose.glucose + glucose[1].glucose) / 2 -
                 (Decimal(glucose[3].glucose + glucose[2].glucose) / 2)
-
+            
             if currentBG == 0, (lastGlucose.date ?? .distantPast).timeIntervalSinceNow > -5.minutes.timeInterval {
                 currentBG = Decimal(lastGlucose.glucose)
             }
         }
-        
-        // Get the most effective recent carbs value
+
         func getEffectiveRecentCarbs() -> Decimal {
             // If we have a manually specified entry from UI, use it
             if manualCarbEntry > 0 {
@@ -222,12 +211,6 @@ extension Bolus {
                     // Use Oref0 predictions
                     insulin = (evBG - target) / isf
                 } else { insulin = 0 }
-            } else if currentBG == 0, manualGlucose > 0 {
-                let targetDifference = manualGlucose * conversion - target
-                //Leave insulin value at 0 when BG is at or below target
-                if targetDifference > 0 {
-                    targetDifferenceInsulin = isf == 0 ? 0 : targetDifference / isf
-                }
             } else {
                 let targetDifference = currentBG - target
                 //Leave insulin value at 0 when BG is at or below target
@@ -235,12 +218,11 @@ extension Bolus {
                     targetDifferenceInsulin = isf == 0 ? 0 : targetDifference / isf
                 }
             }
-
+            
             // determine whole COB for which we want to dose insulin for and then determine insulin for wholeCOB
-            // If failed recent suggestion use recent carb entry
-            wholeCobInsulin = carbRatio != 0 ? max(cob, recentCarbs) / carbRatio : 0
+            wholeCobInsulin = carbRatio != 0 ? cob / carbRatio : 0
 
-            // determine user-defined fraction of insulin for latest carb entry. 
+            //determine user-defined fraction of insulin for latest carb entry. 
             if effectiveCarbs > 0 {
                 
                 // If COB is unexpectedly 0 but we have effectiveCarbs, use effectiveCarbs value up to maxCOB
@@ -267,23 +249,24 @@ extension Bolus {
             wholeCobInsulin = max(wholeCobInsulin, carbInsulinFraction)
             
             // determine how much the calculator reduces/ increases the bolus because of IOB
-            // If failed recent suggestion use recent IOB value
             if iob > 0 {
-                iobInsulinReduction = (-1) * max(iob, recentIOB)
+                iobInsulinReduction = (-1) * iob
             } else {
-                iobInsulinReduction = (-1) * max(iob, recentIOB)
+                iobInsulinReduction = (-1) * iob
             }
 
             // adding everything together
             // add a calc for the case that no fifteenMinInsulin is available
             if deltaBG != 0 {
                 wholeCalc = (targetDifferenceInsulin + iobInsulinReduction + wholeCobInsulin + fifteenMinInsulin)
-            } else if currentBG == 0, manualGlucose == 0 {
+            } else {
                 // add (rare) case that no glucose value is available -> maybe display warning?
                 // if no bg is available, ?? sets its value to 0
-                wholeCalc = (iobInsulinReduction + wholeCobInsulin)
-            } else {
-                wholeCalc = (targetDifferenceInsulin + iobInsulinReduction + wholeCobInsulin)
+                if currentBG == 0 {
+                    wholeCalc = (iobInsulinReduction + wholeCobInsulin)
+                } else {
+                    wholeCalc = (targetDifferenceInsulin + iobInsulinReduction + wholeCobInsulin)
+                }
             }
                 
             logMessage = "CR: \(carbRatio). \nCOB Approach: \(cob) "
@@ -392,7 +375,7 @@ extension Bolus {
 
             return insulinCalculated
         }
-        
+
         /// When COB module fail
         var recentCarbs: Decimal {
             var temporaryCarbs: Decimal = 0
@@ -471,24 +454,54 @@ extension Bolus {
 
                 if self.useCalc {
                     self.getDeltaBG()
-                    // Automatically calculate insulin
                     self.insulinCalculated = self.calculateInsulin()
                     self.prepareData()
                 }
             }
         }
 
-        func backToCarbsView(override: Bool, editMode: Bool) {
+        func backToCarbsView(
+            complexEntry: Bool = false,
+            _ meal: FetchedResults<Meals>? = nil,
+            override: Bool,
+            deleteNothing: Bool = false,
+            editMode: Bool
+        ) {
+            if let meal = meal, !deleteNothing { 
+                delete(deleteTwice: complexEntry, meal: meal) 
+            }
             showModal(for: .addCarbs(editMode: editMode, override: override))
+        }
+
+        func delete(deleteTwice: Bool, meal: FetchedResults<Meals>) {
+            guard let meals = meal.first else {
+                return
+            }
+
+            let mealArray = DataTable.Treatment(
+                units: units,
+                type: .carbs,
+                date: (deleteTwice ? (meals.createdAt ?? Date()) : meals.actualDate) ?? Date(),
+                id: meals.id ?? "",
+                isFPU: deleteTwice ? true : false,
+                fpuID: deleteTwice ? (meals.fpuID ?? "") : ""
+            )
+
+            if deleteTwice {
+                nsManager.deleteNormalCarbs(mealArray)
+                nsManager.deleteFPUs(mealArray)
+            } else {
+                nsManager.deleteNormalCarbs(mealArray)
+            }
         }
 
         func carbsView(fetch: Bool, hasFatOrProtein: Bool, mealSummary: FetchedResults<Meals>) -> Bool {
             var keepForNextWiew = false
             if fetch {
                 keepForNextWiew = true
-                backToCarbsView(override: false, editMode: true)
+                backToCarbsView(complexEntry: hasFatOrProtein, mealSummary, override: false, deleteNothing: false, editMode: true)
             } else {
-                backToCarbsView(override: true, editMode: false)
+                backToCarbsView(complexEntry: false, mealSummary, override: true, deleteNothing: true, editMode: false)
             }
             return keepForNextWiew
         }
@@ -571,7 +584,6 @@ extension Bolus {
             if let recent = coreDataStorage.recentMeal() {
                 // Store the carbs value for use in calculations
                 manualCarbEntry = Decimal(recent.carbs)
-                mostRecentCarbEntryTime = recent.createdAt ?? Date.now
                 
                 carbToStore = [CarbsEntry(
                     id: recent.id,
@@ -596,8 +608,8 @@ extension Bolus {
                                 self.waitForCarbs = false
                                 self.insulinRequired = 0
                                 self.insulinRecommended = 0
-                            } else if let notNilSugguestion = provider.suggestion {
-                                suggestion = notNilSugguestion
+                            } else if let notNilSuggestion = provider.suggestion {
+                                suggestion = notNilSuggestion
                                 if let notNilPredictions = suggestion?.predictions {
                                     predictions = notNilPredictions
                                 }
