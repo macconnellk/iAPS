@@ -82,6 +82,7 @@ extension Bolus {
                                     liveEditing: true
                                 )
                             }.onChange(of: state.manualGlucose) {
+                                // Recalculate insulin when manual glucose changes
                                 state.insulinCalculated = state.calculateInsulin()
                             }
                         } header: { Text("Missing Glucose") }
@@ -109,17 +110,29 @@ extension Bolus {
                                 .font(.footnote)
                                 .buttonStyle(PlainButtonStyle())
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                            
+                            // Hijacking Fatty Meals Functionality to enable calculation of insulin using latest carbs or COB
                             if state.fattyMeals {
                                 Spacer()
                                 Toggle(isOn: $state.useFattyMealCorrectionFactor) {
-                                    Text("Fatty Meal")
+                                    Text("Calculate Insulin")
                                 }
                                 .toggleStyle(CheckboxToggleStyle())
                                 .font(.footnote)
-                                .onChange(of: state.useFattyMealCorrectionFactor) {
-                                    state.insulinCalculated = state.calculateInsulin()
-                                }
-                            }
+                                .onChange(of: state.useFattyMealCorrectionFactor) { _ in 
+                                    //If new carbs have been entered in the last 3 minutes
+                                   
+                                    if let createdAt = meal.first?.createdAt,
+                                       Date().timeIntervalSince(createdAt) < 120,
+                                       let carbs = meal.first?.carbs, carbs > 0 {
+                                            state.manualCarbEntry = Decimal(carbs)
+                                            state.insulinCalculated = state.calculateInsulin()
+                                    } else {
+                                        state.manualCarbEntry = 0
+                                        state.insulinCalculated = state.calculateInsulin()
+                                    } 
+                                 } 
+                             }
                         }
                     }
 
@@ -151,13 +164,14 @@ extension Bolus {
                             "0",
                             value: $state.amount,
                             formatter: formatter,
-                            liveEditing: true
+                            cleanInput: true,
+                            useButtons: true
                         )
                         Text(exceededMaxBolus ? "😵" : " U").foregroundColor(.secondary)
                     }
                     .focused($isFocused)
-                    .onChange(of: state.amount) {
-                        if state.amount > state.maxBolus {
+                    .onChange(of: state.amount) { newValue in
+                        if newValue > state.maxBolus {
                             exceededMaxBolus = true
                         } else {
                             exceededMaxBolus = false
@@ -214,6 +228,13 @@ extension Bolus {
                         .frame(maxWidth: .infinity, alignment: .center)
                         .listRowBackground(Color(.systemBlue))
                         .tint(.white)
+                        
+                        // Added calculation log display
+                        HStack {  
+                            let logMessage = state.logMessage
+                            Text("Calcs: " + (logMessage.isEmpty ? "" : "(\(logMessage))"))
+                            .font(.system(size: 13)) // Adjust the font size here
+                        }
                     }
                     footer: {
                         if (-1 * state.loopDate.timeIntervalSinceNow / 60) > state.loopReminder, let string = state.lastLoop() {
@@ -255,7 +276,21 @@ extension Bolus {
                     state.waitForCarbs = fetch
                     state.waitForSuggestionInitial = waitForSuggestion
                     state.waitForSuggestion = waitForSuggestion
+                    
+                    // Use the meal's carbs value if available
+                    if let carbs = meal.first?.carbs, carbs > 0 {
+                        state.manualCarbEntry = Decimal(carbs)
+                    }
+                    
+                    // Automatically calculate insulin
                     state.insulinCalculated = state.calculateInsulin()
+                }
+            }
+            .onDisappear {
+                if fetch, hasFatOrProtein, !keepForNextWiew, state.useCalc, !state.eventualBG {
+                    state.delete(deleteTwice: true, meal: meal)
+                } else if fetch, !keepForNextWiew, state.useCalc, !state.eventualBG {
+                    state.delete(deleteTwice: false, meal: meal)
                 }
             }
             .popup(isPresented: showInfo, alignment: .bottom, direction: .center, type: .default) {
@@ -288,9 +323,9 @@ extension Bolus {
         func carbsView() {
             if fetch {
                 keepForNextWiew = true
-                state.backToCarbsView(override: false, editMode: true)
+                state.backToCarbsView(complexEntry: hasFatOrProtein, meal, override: false, deleteNothing: false, editMode: true)
             } else {
-                state.backToCarbsView(override: true, editMode: false)
+                state.backToCarbsView(complexEntry: false, meal, override: true, deleteNothing: true, editMode: false)
             }
         }
 
