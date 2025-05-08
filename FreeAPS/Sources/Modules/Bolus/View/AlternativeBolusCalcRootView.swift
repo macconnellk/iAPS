@@ -82,7 +82,6 @@ extension Bolus {
                                     liveEditing: true
                                 )
                             }.onChange(of: state.manualGlucose) {
-                                // Recalculate insulin when manual glucose changes
                                 state.insulinCalculated = state.calculateInsulin()
                             }
                         } header: { Text("Missing Glucose") }
@@ -111,7 +110,7 @@ extension Bolus {
                                 .buttonStyle(PlainButtonStyle())
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             
-                            // Use fatty meals toggle to enable calculation
+                            // Highjackig Fatty Meals Functionality to enable calculation of insulin using latest carbs or COB
                             if state.fattyMeals {
                                 Spacer()
                                 Toggle(isOn: $state.useFattyMealCorrectionFactor) {
@@ -120,19 +119,12 @@ extension Bolus {
                                 .toggleStyle(CheckboxToggleStyle())
                                 .font(.footnote)
                                 .onChange(of: state.useFattyMealCorrectionFactor) { _ in 
-                                    // If new carbs have been entered in the last 2 minutes
-                                    if let createdAt = meal.first?.createdAt,
-                                       Date().timeIntervalSince(createdAt) < 120,
-                                       let carbs = meal.first?.carbs, carbs > 0 {
-                                        state.insulinCalculated = state.calculateInsulin(manualCarbEntry: Decimal(carbs))
-                                    } else {
-                                        // No recent carbs, use 0
-                                        state.insulinCalculated = state.calculateInsulin(manualCarbEntry: 0)
-                                    } 
+                                    // When toggle changes, recalculate insulin
+                                    state.insulinCalculated = state.calculateInsulin()
                                 } 
+                             }
                             }
                         }
-                    }
 
                     if state.waitForSuggestion {
                         HStack {
@@ -162,13 +154,15 @@ extension Bolus {
                             "0",
                             value: $state.amount,
                             formatter: formatter,
-                            liveEditing: true
+                            cleanInput: true,
+                            useButtons: true
                         )
                         Text(exceededMaxBolus ? "😵" : " U").foregroundColor(.secondary)
                     }
+                    
                     .focused($isFocused)
-                    .onChange(of: state.amount) {
-                        if state.amount > state.maxBolus {
+                    .onChange(of: state.amount) { newValue in
+                        if newValue > state.maxBolus {
                             exceededMaxBolus = true
                         } else {
                             exceededMaxBolus = false
@@ -226,7 +220,7 @@ extension Bolus {
                         .listRowBackground(Color(.systemBlue))
                         .tint(.white)
                         
-                        // Added calculation log display
+                        // Only addition - calculation log display
                         HStack {  
                             let logMessage = state.logMessage
                             Text("Calcs: " + (logMessage.isEmpty ? "" : "(\(logMessage))"))
@@ -263,30 +257,19 @@ extension Bolus {
                 trailing: Button {
                     state.hideModal()
                     state.notActive()
-                    if fetch { state.apsManager.determineBasalSync() }
                 }
                 label: { Text("Cancel") }
             )
             .onAppear {
                 configureView {
                     state.viewActive()
-                    state.waitForCarbs = fetch
                     state.waitForSuggestionInitial = waitForSuggestion
                     state.waitForSuggestion = waitForSuggestion
-                    
-                    // Use the meal's carbs value if available
-                    if let carbs = meal.first?.carbs, carbs > 0 {
-                        state.manualCarbEntry = Decimal(carbs)
-                    }
-                    
-                    // Automatically calculate insulin
                     state.insulinCalculated = state.calculateInsulin()
                 }
             }
             .onDisappear {
-                // Handle cleanup when view disappears
                 if fetch, hasFatOrProtein, !keepForNextWiew, state.useCalc, !state.eventualBG {
-                    // Use delete method that accepts FetchedResults
                     state.delete(deleteTwice: true, meal: meal)
                 } else if fetch, !keepForNextWiew, state.useCalc, !state.eventualBG {
                     state.delete(deleteTwice: false, meal: meal)
