@@ -12,8 +12,8 @@ extension Bolus {
         @Injected() var settings: SettingsManager!
         @Injected() var announcementStorage: AnnouncementsStorage!
         @Injected() var carbsStorage: CarbsStorage!
-        @Injected() var nsManager: NightscoutManager!
         @Injected() var pumpHistoryStorage: PumpHistoryStorage!
+        @Injected() var nsManager: NightscoutManager!
 
         @Published var suggestion: Suggestion?
         @Published var predictions: Predictions?
@@ -67,7 +67,7 @@ extension Bolus {
         @Published var useFattyMealCorrectionFactor: Bool = false
         @Published var displayPredictions: Bool = true
         
-        // Added for logging and enhanced calculation
+        // Added for enhanced calculation and logging
         @Published var latestCarbEntryInsulin: Decimal = 0
         @Published var roundedLatestCarbEntryInsulin: Decimal = 0
         @Published var log_roundedWholeCalc: Decimal = 0
@@ -123,7 +123,7 @@ extension Bolus {
             minimumPrediction = settingsManager.settings.minumimPrediction
             threshold = settingsManager.preferences.threshold_setting
             maxBolus = provider.pumpSettings().maxBolus
-            maxCOB = settings.preferences.maxCOB
+            maxCOB = settings.preferences.maxCOB // Added to initialize maxCOB
             fraction = settings.settings.overrideFactor
             useCalc = settings.settings.useCalc
             fattyMeals = settings.settings.fattyMeals
@@ -152,8 +152,6 @@ extension Bolus {
                                     predictions = notNilPredictions
                                 }
                             }
-                            // Calculate insulin after suggestion updates
-                            self.insulinCalculated = self.calculateInsulin()
                         }.store(in: &lifetime)
                     setupPumpData()
                     loopDate = apsManager.lastLoopDate
@@ -202,13 +200,8 @@ extension Bolus {
             return 0
         }
 
-        func calculateInsulin(manualCarbEntry: Decimal? = nil) -> Decimal {
+        func calculateInsulin() -> Decimal {
             let conversion: Decimal = units == .mmolL ? 0.0555 : 1
-            
-            // Update the instance variable if provided
-            if let manualEntry = manualCarbEntry {
-                self.manualCarbEntry = manualEntry
-            }
             
             // Get the most appropriate carb entry to use
             let effectiveCarbs = getEffectiveRecentCarbs()
@@ -224,7 +217,7 @@ extension Bolus {
                 } else { insulin = 0 }
             } else if currentBG == 0, manualGlucose > 0 {
                 let targetDifference = manualGlucose * conversion - target
-                //Leave insulin value at 0 when BG is at or below target
+                // Leave insulin value at 0 when BG is at or below target
                 if targetDifference > 0 {
                     targetDifferenceInsulin = isf == 0 ? 0 : targetDifference / isf
                 } else {
@@ -232,7 +225,7 @@ extension Bolus {
                 }
             } else {
                 let targetDifference = currentBG - target
-                //Leave insulin value at 0 when BG is at or below target
+                // Leave insulin value at 0 when BG is at or below target
                 if targetDifference > 0 {
                     targetDifferenceInsulin = isf == 0 ? 0 : targetDifference / isf
                 } else {
@@ -272,7 +265,7 @@ extension Bolus {
 
             // Set Approach Reccomendation to the higher amount. Ensures more insulin dosed up front for high carb meals
             wholeCobInsulin = max(wholeCobInsulin, carbInsulinFraction)
-            
+
             // determine how much the calculator reduces/ increases the bolus because of IOB
             // If failed recent suggestion use recent IOB value
             if iob > 0 {
@@ -292,102 +285,19 @@ extension Bolus {
             } else {
                 wholeCalc = (targetDifferenceInsulin + iobInsulinReduction + wholeCobInsulin)
             }
-                
+            
+            // Basic log setup - will enhance in next layer
             logMessage = "CR: \(carbRatio). \nCOB Approach: \(cob) "
-            
-            if effectiveCarbs > 0 {      
 
-                //calculate insulin for latest carb entry
-                latestCarbEntryInsulin = (effectiveCarbs / carbRatio)
-                wholeCalc_carbs = latestCarbEntryInsulin + targetDifferenceInsulin
-                log_manualCarbEntry_used = effectiveCarbs   
-             
-                // logging and rounding latestCarbEntryInsulin and wholecalc
-                let wholeCalc_carbsAsDouble = Double(wholeCalc_carbs)
-                roundedwholeCalc_carbs = Decimal(round(100 * wholeCalc_carbsAsDouble) / 100)
-                let latestCarbEntryInsulinAsDouble = Double(latestCarbEntryInsulin)
-                roundedLatestCarbEntryInsulin = Decimal(round(100 * latestCarbEntryInsulinAsDouble) / 100)
-                let Log_wholeCalcAsDouble = Double(wholeCalc)
-                log_roundedWholeCalc = Decimal(round(100 * Log_wholeCalcAsDouble) / 100)
-                let Log_targetDifferenceInsulinAsDouble = Double(targetDifferenceInsulin)
-                log_roundedtargetDifferenceInsulin = Decimal(round(100 * Log_targetDifferenceInsulinAsDouble) / 100)
-                let Log_wholeCobInsulinAsDouble = Double(wholeCobInsulin)
-                log_roundedwholeCobInsulin = Decimal(round(100 * Log_wholeCobInsulinAsDouble) / 100)
-                let Log_iobInsulinReductionAsDouble = Double(iobInsulinReduction)
-                log_roundediobInsulinReduction = Decimal(round(100 * Log_iobInsulinReductionAsDouble) / 100)
-                
-                logMessage += "--> \(log_roundedWholeCalc) U\n-------> Correction: \(log_roundedtargetDifferenceInsulin) U\n-------> IOB: \(log_roundediobInsulinReduction) U\n-------> COB: \(log_roundedwholeCobInsulin) U \(log_COBapproach)\nCarbs Used:\(log_manualCarbEntry_used) ----> \(roundedwholeCalc_carbs) U\n-------> Carbs: \(roundedLatestCarbEntryInsulin) U-------> Correction: \(log_roundedtargetDifferenceInsulin) U"
-
-                wholeCalc = min(wholeCalc, wholeCalc_carbs)
-                
-           } else {
-                let Log_wholeCalcAsDouble = Double(wholeCalc)
-                log_roundedWholeCalc = Decimal(round(100 * Log_wholeCalcAsDouble) / 100)
-                logMessage += "\nNo New Carbs. Recommendation Disabled, would be \(log_roundedWholeCalc)"
-                wholeCalc = 0
-            }
-            
-            // rounding
-            let wholeCalcAsDouble = Double(wholeCalc)
-            roundedWholeCalc = Decimal(round(100 * wholeCalcAsDouble) / 100)
-            
             // apply custom factor at the end of the calculations
             // New code moving fraction up to the COB/Carb calculation
             let result = !eventualBG ? wholeCalc : insulin * fraction
             
-
             // apply custom factor if fatty meal toggle in bolus calc config settings is on and the box for fatty meals is checked (in RootView)
             if useFattyMealCorrectionFactor {
                 insulinCalculated = result * fattyMealFactor
             } else {
                 insulinCalculated = result
-            }
-
-            // Reduce insulin if BG is dropping rapidly or lows are predicted
-            // A blend of Oref0 predictions and the Swift calculator to reduce insulin when lows predicted
-            deltaBasedInsulin = insulinCalculated
-            predictionBasedInsulin = insulinCalculated
-
-            // Calculate BG delta-based reduction first
-            if deltaBasedInsulin > 0 {
-                if deltaBG <= -45 && currentBG < (threshold + 50) {
-                    // Double arrow down rate (>3 mg/dL/min drop)
-                    // Keep 70% of calculated insulin when within 50 points of threshold
-                    deltaBasedInsulin = deltaBasedInsulin * 0.7
-                    deltaReductionApplied = true
-                    logMessage += "\nVery rapid BG drop \(deltaBG), delta-based calculation suggests 70% of original bolus"
-                } else if deltaBG <= -30 && currentBG < (threshold + 30) {
-                    // Single arrow down rate (2-3 mg/dL/min drop)
-                    // Keep 80% of calculated insulin when within 30 points of threshold
-                    deltaBasedInsulin = deltaBasedInsulin * 0.8
-                    deltaReductionApplied = true
-                    logMessage += "\nRapid BG drop \(deltaBG), delta-based calculation suggests 80% of original bolus"
-                }
-            }
-
-            // Calculate prediction-based reduction
-            if minimumPrediction && predictionBasedInsulin > 0 {
-                if minPredBG < threshold {
-                    // Reduce insulin by calculating difference between threshold +5 (for added safety) and minPredBG divided by ISF
-                    belowThresholdInsulinReduction = roundBolus(abs(threshold + 5 - minPredBG) / isf)
-                    predictionBasedInsulin = predictionBasedInsulin - abs(belowThresholdInsulinReduction)
-                    predictionReductionApplied = true
-                    logMessage += "\nminPrediction \(minPredBG) < threshold, prediction-based calculation suggests reducing bolus by \(belowThresholdInsulinReduction)"
-                } else if evBG < target {
-                    // Reduce insulin by calculating difference between target and Eventual BG divided by ISF
-                    belowTargetInsulinReduction = roundBolus(abs(target - evBG) / isf)
-                    predictionBasedInsulin = predictionBasedInsulin - abs(belowTargetInsulinReduction)
-                    predictionReductionApplied = true
-                    logMessage += "\nEventual BG \(evBG) < target, prediction-based calculation suggests reducing bolus by \(belowTargetInsulinReduction)"
-                }
-            }
-
-            // Choose the minimum insulin amount between the two calculations
-            insulinCalculated = min(deltaBasedInsulin, predictionBasedInsulin)
-
-            // Only add the comparison log message if both types of reductions were applied
-            if deltaReductionApplied && predictionReductionApplied {
-                logMessage += "\nFinal insulin calculation chose minimum between delta-based (\(deltaBasedInsulin)) and prediction-based (\(predictionBasedInsulin)) calculations"
             }
 
             // Account for increments (Don't use the apsManager function as that gets much too slow)
@@ -399,7 +309,7 @@ extension Bolus {
 
             return insulinCalculated
         }
-        
+
         /// When COB module fail
         var recentCarbs: Decimal {
             var temporaryCarbs: Decimal = 0
@@ -478,43 +388,9 @@ extension Bolus {
 
                 if self.useCalc {
                     self.getDeltaBG()
-                    // Automatically calculate insulin
                     self.insulinCalculated = self.calculateInsulin()
                     self.prepareData()
                 }
-            }
-        }
-
-        func backToCarbsView(
-            complexEntry: Bool,
-            _ meal: FetchedResults<Meals>,
-            override: Bool,
-            deleteNothing: Bool,
-            editMode: Bool
-        ) {
-            if !deleteNothing { delete(deleteTwice: complexEntry, meal: meal) }
-            showModal(for: .addCarbs(editMode: editMode, override: override))
-        }
-
-        func delete(deleteTwice: Bool, meal: FetchedResults<Meals>) {
-            guard let meals = meal.first else {
-                return
-            }
-
-            let mealArray = DataTable.Treatment(
-                units: units,
-                type: .carbs,
-                date: (deleteTwice ? (meals.createdAt ?? Date()) : meals.actualDate) ?? Date(),
-                id: meals.id ?? "",
-                isFPU: deleteTwice ? true : false,
-                fpuID: deleteTwice ? (meals.fpuID ?? "") : ""
-            )
-
-            if deleteTwice {
-                nsManager.deleteNormalCarbs(mealArray)
-                nsManager.deleteFPUs(mealArray)
-            } else {
-                nsManager.deleteNormalCarbs(mealArray)
             }
         }
 
@@ -526,9 +402,9 @@ extension Bolus {
             var keepForNextWiew = false
             if fetch {
                 keepForNextWiew = true
-                backToCarbsView(complexEntry: hasFatOrProtein, mealSummary, override: false, deleteNothing: false, editMode: true)
+                backToCarbsView(override: false, editMode: true)
             } else {
-                backToCarbsView(complexEntry: false, mealSummary, override: true, deleteNothing: true, editMode: false)
+                backToCarbsView(override: true, editMode: false)
             }
             return keepForNextWiew
         }
@@ -641,8 +517,6 @@ extension Bolus {
                                 if let notNilPredictions = suggestion?.predictions {
                                     predictions = notNilPredictions
                                 }
-                                // Calculate insulin after suggestion updates
-                                self.insulinCalculated = self.calculateInsulin()
                             }
                         }.store(in: &lifetime)
                     setupPumpData()
@@ -663,8 +537,6 @@ extension Bolus.StateModel: SuggestionObserver {
             self.waitForSuggestion = false
         }
         setupInsulinRequired()
-        // Recalculate insulin when suggestion updates
-        insulinCalculated = calculateInsulin()
         loopDate = apsManager.lastLoopDate
 
         if abs(now.timeIntervalSinceNow / 60) > loopReminder * 1.5 {
