@@ -111,17 +111,24 @@ extension Bolus {
                                 .buttonStyle(PlainButtonStyle())
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             
-                            // Fatty Meal toggle back to original purpose
+                            // Use fatty meals toggle to enable calculation
                             if state.fattyMeals {
                                 Spacer()
                                 Toggle(isOn: $state.useFattyMealCorrectionFactor) {
-                                    Text("Fatty Meal")
+                                    Text("Calculate Insulin")
                                 }
                                 .toggleStyle(CheckboxToggleStyle())
                                 .font(.footnote)
                                 .onChange(of: state.useFattyMealCorrectionFactor) { _ in 
-                                    // Recalculate insulin when toggle changes
-                                    state.insulinCalculated = state.calculateInsulin()
+                                    // If new carbs have been entered in the last 2 minutes
+                                    if let createdAt = meal.first?.createdAt,
+                                       Date().timeIntervalSince(createdAt) < 120,
+                                       let carbs = meal.first?.carbs, carbs > 0 {
+                                        state.insulinCalculated = state.calculateInsulin(manualCarbEntry: Decimal(carbs))
+                                    } else {
+                                        // No recent carbs, use 0
+                                        state.insulinCalculated = state.calculateInsulin(manualCarbEntry: 0)
+                                    } 
                                 } 
                             }
                         }
@@ -279,14 +286,10 @@ extension Bolus {
             .onDisappear {
                 // Handle cleanup when view disappears
                 if fetch, hasFatOrProtein, !keepForNextWiew, state.useCalc, !state.eventualBG {
-                    // Since delete() is no longer available in the new code, use carbsStorage
-                    if let id = meal.first?.id {
-                        state.carbsStorage.deleteCarbsEntry(id: id, fpu: true)
-                    }
+                    // Use delete method that accepts FetchedResults
+                    state.delete(deleteTwice: true, meal: meal)
                 } else if fetch, !keepForNextWiew, state.useCalc, !state.eventualBG {
-                    if let id = meal.first?.id {
-                        state.carbsStorage.deleteCarbsEntry(id: id, fpu: false)
-                    }
+                    state.delete(deleteTwice: false, meal: meal)
                 }
             }
             .popup(isPresented: showInfo, alignment: .bottom, direction: .center, type: .default) {
@@ -319,9 +322,9 @@ extension Bolus {
         func carbsView() {
             if fetch {
                 keepForNextWiew = true
-                state.backToCarbsView(override: false, editMode: true)
+                state.backToCarbsView(complexEntry: hasFatOrProtein, meal, override: false, deleteNothing: false, editMode: true)
             } else {
-                state.backToCarbsView(override: true, editMode: false)
+                state.backToCarbsView(complexEntry: false, meal, override: true, deleteNothing: true, editMode: false)
             }
         }
 
