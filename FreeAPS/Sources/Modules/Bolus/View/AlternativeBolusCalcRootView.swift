@@ -82,6 +82,7 @@ extension Bolus {
                                     liveEditing: true
                                 )
                             }.onChange(of: state.manualGlucose) {
+                                // Recalculate insulin when manual glucose changes
                                 state.insulinCalculated = state.calculateInsulin()
                             }
                         } header: { Text("Missing Glucose") }
@@ -109,6 +110,8 @@ extension Bolus {
                                 .font(.footnote)
                                 .buttonStyle(PlainButtonStyle())
                                 .frame(maxWidth: .infinity, alignment: .leading)
+                            
+                            // Fatty Meal toggle back to original purpose
                             if state.fattyMeals {
                                 Spacer()
                                 Toggle(isOn: $state.useFattyMealCorrectionFactor) {
@@ -116,9 +119,10 @@ extension Bolus {
                                 }
                                 .toggleStyle(CheckboxToggleStyle())
                                 .font(.footnote)
-                                .onChange(of: state.useFattyMealCorrectionFactor) {
+                                .onChange(of: state.useFattyMealCorrectionFactor) { _ in 
+                                    // Recalculate insulin when toggle changes
                                     state.insulinCalculated = state.calculateInsulin()
-                                }
+                                } 
                             }
                         }
                     }
@@ -214,6 +218,13 @@ extension Bolus {
                         .frame(maxWidth: .infinity, alignment: .center)
                         .listRowBackground(Color(.systemBlue))
                         .tint(.white)
+                        
+                        // Added calculation log display
+                        HStack {  
+                            let logMessage = state.logMessage
+                            Text("Calcs: " + (logMessage.isEmpty ? "" : "(\(logMessage))"))
+                            .font(.system(size: 13)) // Adjust the font size here
+                        }
                     }
                     footer: {
                         if (-1 * state.loopDate.timeIntervalSinceNow / 60) > state.loopReminder, let string = state.lastLoop() {
@@ -255,7 +266,27 @@ extension Bolus {
                     state.waitForCarbs = fetch
                     state.waitForSuggestionInitial = waitForSuggestion
                     state.waitForSuggestion = waitForSuggestion
+                    
+                    // Use the meal's carbs value if available
+                    if let carbs = meal.first?.carbs, carbs > 0 {
+                        state.manualCarbEntry = Decimal(carbs)
+                    }
+                    
+                    // Automatically calculate insulin
                     state.insulinCalculated = state.calculateInsulin()
+                }
+            }
+            .onDisappear {
+                // Handle cleanup when view disappears
+                if fetch, hasFatOrProtein, !keepForNextWiew, state.useCalc, !state.eventualBG {
+                    // Since delete() is no longer available in the new code, use carbsStorage
+                    if let id = meal.first?.id {
+                        state.carbsStorage.deleteCarbsEntry(id: id, fpu: true)
+                    }
+                } else if fetch, !keepForNextWiew, state.useCalc, !state.eventualBG {
+                    if let id = meal.first?.id {
+                        state.carbsStorage.deleteCarbsEntry(id: id, fpu: false)
+                    }
                 }
             }
             .popup(isPresented: showInfo, alignment: .bottom, direction: .center, type: .default) {
