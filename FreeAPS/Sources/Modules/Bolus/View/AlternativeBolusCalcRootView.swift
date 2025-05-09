@@ -255,6 +255,10 @@ extension Bolus {
                     state.waitForCarbs = fetch
                     state.waitForSuggestionInitial = waitForSuggestion
                     state.waitForSuggestion = waitForSuggestion
+                    // Added by Claude
+                    if let carbs = meal.first?.carbs, carbs > 0 {
+                        state.manualCarbEntry = Decimal(carbs)
+                    }
                     state.insulinCalculated = state.calculateInsulin()
                 }
             }
