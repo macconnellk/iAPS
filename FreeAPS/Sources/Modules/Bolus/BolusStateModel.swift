@@ -343,21 +343,29 @@ extension Bolus {
     }
 
     // Safety check 2: Reduce insulin based on predicted low BGs
-    if minimumPrediction && predictionBasedInsulin > 0 {
-        if minPredBG < threshold {
-            // Reduce insulin by calculating difference between threshold +5 and minPredBG divided by ISF
-            belowThresholdInsulinReduction = roundBolus(abs(threshold + 5 - minPredBG) / isf)
-            predictionBasedInsulin = predictionBasedInsulin - abs(belowThresholdInsulinReduction)
-            predictionReductionApplied = true
-            logMessage += "\nminPrediction \(minPredBG) < threshold, prediction-based calculation suggests reducing bolus by \(belowThresholdInsulinReduction)"
-        } else if evBG < target {
-            // Reduce insulin by calculating difference between target and Eventual BG divided by ISF
-            belowTargetInsulinReduction = roundBolus(abs(target - evBG) / isf)
-            predictionBasedInsulin = predictionBasedInsulin - abs(belowTargetInsulinReduction)
-            predictionReductionApplied = true
-            logMessage += "\nEventual BG \(evBG) < target, prediction-based calculation suggests reducing bolus by \(belowTargetInsulinReduction)"
+        if minimumPrediction && predictionBasedInsulin > 0 {
+            if minPredBG < threshold {
+                // If prediction is dangerously low (below 60 mg/dL or 3.3 mmol/L), zero out insulin
+                let dangerLowThreshold = units == .mmolL ? Decimal(3.3) : Decimal(60)
+                if minPredBG <= dangerLowThreshold {
+                    predictionBasedInsulin = 0
+                    predictionReductionApplied = true
+                    logMessage += "\nDANGER: Very low prediction \(minPredBG) \(units.rawValue), zeroing insulin for safety"
+                } else {
+                    // For less dangerous lows, use proportional reduction
+                    belowThresholdInsulinReduction = roundBolus(abs(threshold + 5 - minPredBG) / isf)
+                    predictionBasedInsulin = predictionBasedInsulin - abs(belowThresholdInsulinReduction)
+                    predictionReductionApplied = true
+                    logMessage += "\nminPrediction \(minPredBG) < threshold, prediction-based calculation suggests reducing bolus by \(belowThresholdInsulinReduction)"
+                }
+            } else if evBG < target {
+                // Reduce insulin by calculating difference between target and Eventual BG divided by ISF
+                belowTargetInsulinReduction = roundBolus(abs(target - evBG) / isf)
+                predictionBasedInsulin = predictionBasedInsulin - abs(belowTargetInsulinReduction)
+                predictionReductionApplied = true
+                logMessage += "\nEventual BG \(evBG) < target, prediction-based calculation suggests reducing bolus by \(belowTargetInsulinReduction)"
+            }
         }
-    }
 
     // Choose the minimum insulin amount between the two calculations for safety
     insulinCalculated = min(deltaBasedInsulin, predictionBasedInsulin)
