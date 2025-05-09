@@ -117,6 +117,7 @@ extension Bolus {
             minimumPrediction = settingsManager.settings.minumimPrediction
             threshold = settingsManager.preferences.threshold_setting
             maxBolus = provider.pumpSettings().maxBolus
+            maxCOB = settings.preferences.maxCOB
             fraction = settings.settings.overrideFactor
             useCalc = settings.settings.useCalc
             fattyMeals = settings.settings.fattyMeals
@@ -165,6 +166,29 @@ extension Bolus {
             }
         }
 
+        func getEffectiveRecentCarbs() -> Decimal {
+            // If we have a manually specified entry from UI, use it first (highest priority)
+            if manualCarbEntry > 0 {
+                return manualCarbEntry
+            }
+    
+            // If we have carbs in carbToStore and they're recent (within last 120 seconds)
+            if let carbEntry = carbToStore.first, 
+               carbEntry.carbs > 0,
+               let createdAt = carbEntry.createdAt,
+               Date().timeIntervalSince(createdAt) < 120 {
+                return carbEntry.carbs
+            }
+    
+            // Otherwise use COB, but only if it seems valid
+            if cob > 0 {
+                return cob
+            }
+    
+            // No valid carbs found
+            return 0
+        }
+        
         func calculateInsulin() -> Decimal {
             // The actual glucose threshold
             threshold = max(target - 0.5 * (target - 40 * conversion), threshold * conversion)
