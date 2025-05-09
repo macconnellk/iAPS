@@ -166,21 +166,30 @@ extension Bolus {
             }
         }
 
-       // Minimal version that just accesses carbToStore without complex checks
-        func getEffectiveRecentCarbs() -> Decimal {
-            // If we have a manually specified entry from UI, use it first
-            if manualCarbEntry > 0 {
-                return manualCarbEntry
-            }
+       // Enhanced version with date check
+func getEffectiveRecentCarbs() -> Decimal {
+    // If we have a manually specified entry from UI, use it first
+    if manualCarbEntry > 0 {
+        return manualCarbEntry
+    }
     
-            // Just check if carbToStore exists and has elements
-            if !carbToStore.isEmpty {
-                return carbToStore[0].carbs
+    // Check for recent entries in carbToStore with date check
+    if !carbToStore.isEmpty {
+        let entry = carbToStore[0]
+        if entry.carbs > 0 {
+            // Check if the entry is recent (within last 120 seconds)
+            if let createdAt = entry.createdAt {
+                let timeInterval = Date().timeIntervalSince(createdAt)
+                if timeInterval < 120 {
+                    return entry.carbs
+                }
             }
-    
-            // Otherwise use COB if available
-            return cob > 0 ? cob : 0
         }
+    }
+    
+    // Otherwise use COB if available
+    return cob > 0 ? cob : 0
+}
         
         func calculateInsulin() -> Decimal {
             // The actual glucose threshold
