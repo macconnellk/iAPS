@@ -166,10 +166,16 @@ extension Bolus {
             }
         }
 
-       func getEffectiveRecentCarbs() -> Decimal {
+       // Minimal version that just accesses carbToStore without complex checks
+        func getEffectiveRecentCarbs() -> Decimal {
             // If we have a manually specified entry from UI, use it first
             if manualCarbEntry > 0 {
                 return manualCarbEntry
+            }
+    
+            // Just check if carbToStore exists and has elements
+            if !carbToStore.isEmpty {
+                return carbToStore[0].carbs
             }
     
             // Otherwise use COB if available
