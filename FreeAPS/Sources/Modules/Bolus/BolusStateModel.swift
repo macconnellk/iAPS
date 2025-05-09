@@ -178,70 +178,204 @@ extension Bolus {
         }
 
         
-        func calculateInsulin() -> Decimal {
+        func calculateInsulin(manualCarbEntry: Decimal? = nil) -> Decimal {
+            let conversion: Decimal = units == .mmolL ? 0.0555 : 1
+    
+            // Update the instance variable if provided
+            if let manualEntry = manualCarbEntry {
+                self.manualCarbEntry = manualEntry
+            }
+    
+            // Get the most appropriate carb entry to use
+            let effectiveCarbs = getEffectiveRecentCarbs()
+    
             // The actual glucose threshold
             threshold = max(target - 0.5 * (target - 40 * conversion), threshold * conversion)
 
             // Use either the eventual glucose prediction or just the Swift code
             if eventualBG {
                 if evBG > target {
-                    // Use Oref0 predictions{
+                    // Use Oref0 predictions
                     insulin = (evBG - target) / isf
                 } else { insulin = 0 }
             } else if currentBG == 0, manualGlucose > 0 {
                 let targetDifference = manualGlucose * conversion - target
-                targetDifferenceInsulin = isf == 0 ? 0 : targetDifference / isf
+                //Leave insulin value at 0 when BG is at or below target
+                if targetDifference > 0 {
+                    targetDifferenceInsulin = isf == 0 ? 0 : targetDifference / isf
+                } else {
+                    targetDifferenceInsulin = 0
+                }
             } else {
                 let targetDifference = currentBG - target
-                targetDifferenceInsulin = isf == 0 ? 0 : targetDifference / isf
+                //Leave insulin value at 0 when BG is at or below target
+                if targetDifference > 0 {
+                    targetDifferenceInsulin = isf == 0 ? 0 : targetDifference / isf
+                } else {
+                    targetDifferenceInsulin = 0
+                }
             }
 
             // more or less insulin because of bg trend in the last 15 minutes
             fifteenMinInsulin = isf == 0 ? 0 : (deltaBG * conversion) / isf
 
-            // determine whole COB for which we want to dose insulin for and then determine insulin for wholeCOB
-            // If failed recent suggestion use recent carb entry
-            let effectiveCarbs = getEffectiveRecentCarbs()
-            wholeCobInsulin = carbRatio != 0 ? effectiveCarbs / carbRatio : 0
+            // Calculate insulin for COB
+            wholeCobInsulin = carbRatio != 0 ? cob / carbRatio : 0
+
+            // Calculate insulin for manual carb entry
+            if effectiveCarbs > 0 {
+                // If COB is unexpectedly 0 but we have effectiveCarbs, use effectiveCarbs value up to maxCOB
+                if cob == 0 {
+                    wholeCobInsulin = carbRatio != 0 ? min(effectiveCarbs, maxCOB) / carbRatio : 0
+                    // Turn off oref predictions blend bc not reliable without COB data
+                    minimumPrediction = false
+                }
+
+                carbInsulinFraction = carbRatio != 0 ? effectiveCarbs / carbRatio : 0
+                if effectiveCarbs > maxCOB {
+                    carbInsulinFraction = carbInsulinFraction * fraction
+                }
+            }
+
+            // Log the Max Approach
+            if wholeCobInsulin >= carbInsulinFraction {
+                log_COBapproach = "COB Insulin Used"
+            } else {
+                log_COBapproach = "Fraction Carb Insulin Used"
+            }
+
+            // Set Approach Recommendation to the higher amount. Ensures more insulin dosed up front for high carb meals
+            wholeCobInsulin = max(wholeCobInsulin, carbInsulinFraction)
 
             // determine how much the calculator reduces/ increases the bolus because of IOB
-            // If failed recent suggestion use recent IOB value
-            iobInsulinReduction = (-1) * max(iob, recentIOB)
+            if iob > 0 {
+                iobInsulinReduction = (-1) * iob
+            } else {
+                iobInsulinReduction = (-1) * iob
+            }
 
             // adding everything together
             // add a calc for the case that no fifteenMinInsulin is available
             if deltaBG != 0 {
                 wholeCalc = (targetDifferenceInsulin + iobInsulinReduction + wholeCobInsulin + fifteenMinInsulin)
             } else if currentBG == 0, manualGlucose == 0 {
+                // add (rare) case that no glucose value is available -> maybe display warning?
+                // if no bg is available, ?? sets its value to 0
                 wholeCalc = (iobInsulinReduction + wholeCobInsulin)
             } else {
                 wholeCalc = (targetDifferenceInsulin + iobInsulinReduction + wholeCobInsulin)
             }
+    
+            // Calculate detailed log values for display
+            if effectiveCarbs > 0 {
+                // Calculate insulin for latest carb entry
+                latestCarbEntryInsulin = (effectiveCarbs / carbRatio)
+                wholeCalc_carbs = latestCarbEntryInsulin + targetDifferenceInsulin
+                log_manualCarbEntry_used = effectiveCarbs
+        
+                // Format values for logging
+                let wholeCalc_carbsAsDouble = Double(wholeCalc_carbs)
+                roundedwholeCalc_carbs = Decimal(round(100 * wholeCalc_carbsAsDouble) / 100)
+        let latestCarbEntryInsulinAsDouble = Double(latestCarbEntryInsulin)
+        roundedLatestCarbEntryInsulin = Decimal(round(100 * latestCarbEntryInsulinAsDouble) / 100)
+        let Log_wholeCalcAsDouble = Double(wholeCalc)
+        log_roundedWholeCalc = Decimal(round(100 * Log_wholeCalcAsDouble) / 100)
+        let Log_targetDifferenceInsulinAsDouble = Double(targetDifferenceInsulin)
+        log_roundedtargetDifferenceInsulin = Decimal(round(100 * Log_targetDifferenceInsulinAsDouble) / 100)
+        let Log_wholeCobInsulinAsDouble = Double(wholeCobInsulin)
+        log_roundedwholeCobInsulin = Decimal(round(100 * Log_wholeCobInsulinAsDouble) / 100)
+        let Log_iobInsulinReductionAsDouble = Double(iobInsulinReduction)
+        log_roundediobInsulinReduction = Decimal(round(100 * Log_iobInsulinReductionAsDouble) / 100)
+        
+        // Create detailed log message
+        logMessage = "CR: \(carbRatio). \nCOB Approach: \(cob) " +
+            "--> \(log_roundedWholeCalc) U\n" +
+            "-------> Correction: \(log_roundedtargetDifferenceInsulin) U\n" +
+            "-------> IOB: \(log_roundediobInsulinReduction) U\n" +
+            "-------> COB: \(log_roundedwholeCobInsulin) U \(log_COBapproach)\n" +
+            "Carbs Used: \(log_manualCarbEntry_used) ----> \(roundedwholeCalc_carbs) U\n" +
+            "-------> Carbs: \(roundedLatestCarbEntryInsulin) U " + 
+            "-------> Correction: \(log_roundedtargetDifferenceInsulin) U"
+            
+        wholeCalc = min(wholeCalc, wholeCalc_carbs)
+    } else {
+        // Log message when no carbs are present
+        let Log_wholeCalcAsDouble = Double(wholeCalc)
+        log_roundedWholeCalc = Decimal(round(100 * Log_wholeCalcAsDouble) / 100)
+        logMessage = "CR: \(carbRatio). \nCOB Approach: \(cob) \n" +
+                    "No New Carbs. Recommendation: \(log_roundedWholeCalc)"
+    }
+    
+    // Round values
+    let wholeCalcAsDouble = Double(wholeCalc)
+    roundedWholeCalc = Decimal(round(100 * wholeCalcAsDouble) / 100)
+        
+    // apply custom factor at the end of the calculations
+    // New code moving fraction up to the COB/Carb calculation
+    let result = !eventualBG ? wholeCalc : insulin * fraction
+    
+    // apply custom factor if fatty meal toggle in bolus calc config settings is on and the box for fatty meals is checked (in RootView)
+    if useFattyMealCorrectionFactor {
+        insulinCalculated = result * fattyMealFactor
+    } else {
+        insulinCalculated = result
+    }
 
-            // apply custom factor at the end of the calculations
-            let result = !eventualBG ? wholeCalc * fraction : insulin * fraction
+    // Store initial insulin calculation
+    deltaBasedInsulin = insulinCalculated
+    predictionBasedInsulin = insulinCalculated
 
-            // apply custom factor if fatty meal toggle in bolus calc config settings is on and the box for fatty meals is checked (in RootView)
-            if useFattyMealCorrectionFactor {
-                insulinCalculated = result * fattyMealFactor
-            } else {
-                insulinCalculated = result
-            }
-
-            // A blend of Oref0 predictions and the Swift calculator {
-            if minimumPrediction, minPredBG < threshold {
-                if eventualBG { insulin = 0 }
-                return 0
-            }
-
-            // Account for increments (Don't use the apsManager function as that is much too slow)
-            insulinCalculated = roundBolus(insulinCalculated)
-            // 0 up to maxBolus
-            insulinCalculated = min(max(insulinCalculated, 0), maxBolus)
-
-            prepareData()
-            return insulinCalculated
+    // Safety check 1: Reduce insulin if BG is dropping rapidly
+    if deltaBasedInsulin > 0 {
+        if deltaBG <= -45 && currentBG < (threshold + 50) {
+            // Double arrow down rate (>3 mg/dL/min drop)
+            // Keep 70% of calculated insulin when within 50 points of threshold
+            deltaBasedInsulin = deltaBasedInsulin * 0.7
+            deltaReductionApplied = true
+            logMessage += "\nVery rapid BG drop \(deltaBG), delta-based calculation suggests 70% of original bolus"
+        } else if deltaBG <= -30 && currentBG < (threshold + 30) {
+            // Single arrow down rate (2-3 mg/dL/min drop)
+            // Keep 80% of calculated insulin when within 30 points of threshold
+            deltaBasedInsulin = deltaBasedInsulin * 0.8
+            deltaReductionApplied = true
+            logMessage += "\nRapid BG drop \(deltaBG), delta-based calculation suggests 80% of original bolus"
         }
+    }
+
+    // Safety check 2: Reduce insulin based on predicted low BGs
+    if minimumPrediction && predictionBasedInsulin > 0 {
+        if minPredBG < threshold {
+            // Reduce insulin by calculating difference between threshold +5 and minPredBG divided by ISF
+            belowThresholdInsulinReduction = roundBolus(abs(threshold + 5 - minPredBG) / isf)
+            predictionBasedInsulin = predictionBasedInsulin - abs(belowThresholdInsulinReduction)
+            predictionReductionApplied = true
+            logMessage += "\nminPrediction \(minPredBG) < threshold, prediction-based calculation suggests reducing bolus by \(belowThresholdInsulinReduction)"
+        } else if evBG < target {
+            // Reduce insulin by calculating difference between target and Eventual BG divided by ISF
+            belowTargetInsulinReduction = roundBolus(abs(target - evBG) / isf)
+            predictionBasedInsulin = predictionBasedInsulin - abs(belowTargetInsulinReduction)
+            predictionReductionApplied = true
+            logMessage += "\nEventual BG \(evBG) < target, prediction-based calculation suggests reducing bolus by \(belowTargetInsulinReduction)"
+        }
+    }
+
+    // Choose the minimum insulin amount between the two calculations for safety
+    insulinCalculated = min(deltaBasedInsulin, predictionBasedInsulin)
+
+    // Add comparison log if both reductions applied
+    if deltaReductionApplied && predictionReductionApplied {
+        logMessage += "\nFinal insulin calculation chose minimum between delta-based (\(deltaBasedInsulin)) and prediction-based (\(predictionBasedInsulin)) calculations"
+    }
+
+    // Account for increments (Don't use the apsManager function as that gets much too slow)
+    insulinCalculated = roundBolus(insulinCalculated)
+    // 0 up to maxBolus
+    insulinCalculated = min(max(insulinCalculated, 0), maxBolus)
+
+    prepareData()
+
+    return insulinCalculated
+}
 
         /// When COB module fail
         var recentCarbs: Decimal {
