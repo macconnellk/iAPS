@@ -75,6 +75,30 @@ extension Bolus {
         @Published var carbToStore = [CarbsEntry]()
         @Published var history: [PumpHistoryEvent]?
 
+        @Published var maxCOB: Decimal = 0
+        @Published var roundedWholeCalc: Decimal = 0
+        @Published var latestCarbEntryInsulin: Decimal = 0
+        @Published var roundedLatestCarbEntryInsulin: Decimal = 0
+        @Published var log_roundedWholeCalc: Decimal = 0
+        @Published var roundedwholeCalc_carbs: Decimal = 0
+        @Published var log_roundedtargetDifferenceInsulin: Decimal = 0
+        @Published var log_roundedwholeCobInsulin: Decimal = 0
+        @Published var log_roundediobInsulinReduction: Decimal = 0
+        @Published var wholeCalc_carbs: Decimal = 0
+        @Published var carbInsulinFraction: Decimal = 0
+        @Published var logMessage: String = ""
+        @Published var viewlogMessage: String = "Waiting..."
+        @Published var manualCarbEntry: Decimal = 0
+        @Published var log_manualCarbEntry_used: Decimal = 0
+        @Published var belowThresholdInsulinReduction: Decimal = 0
+        @Published var belowTargetInsulinReduction: Decimal = 0
+        @Published var log_COBapproach: String = ""
+        @Published var deltaBasedInsulin: Decimal = 0
+        @Published var predictionBasedInsulin: Decimal = 0
+        @Published var deltaReductionApplied: Bool = false
+        @Published var predictionReductionApplied: Bool = false
+        @Published var mostRecentCarbEntryTime: Date = .distantPast
+
         let loopReminder: CGFloat = 4
         let coreDataStorage = CoreDataStorage()
 
