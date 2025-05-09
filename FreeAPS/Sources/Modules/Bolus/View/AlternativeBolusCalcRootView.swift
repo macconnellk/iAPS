@@ -215,136 +215,33 @@ extension Bolus {
         .listRowBackground(Color(.systemBlue))
         .tint(.white)
         
-        // Add this new enhanced calculation log display
-        VStack(alignment: .leading, spacing: 4) {
+        // REPLACE THE EXISTING CALCULATION LOG CODE WITH THIS:
+        VStack(alignment: .leading) {
             DisclosureGroup(
                 content: {
-                    ScrollView {
-                        VStack(alignment: .leading, spacing: 8) {
-                            // Basic parameters
-                            Group {
-                                HStack {
-                                    Text("Carb Ratio:").bold()
-                                    Spacer()
-                                    Text("\(state.carbRatio, specifier: "%.1f")")
-                                }
-                                
-                                HStack {
-                                    Text("ISF:").bold()
-                                    Spacer()
-                                    Text("\(state.isf, specifier: "%.1f") \(state.units.rawValue)/U")
-                                }
-                                
-                                HStack {
-                                    Text("Current BG:").bold()
-                                    Spacer()
-                                    Text("\(state.currentBG, specifier: "%.1f") \(state.units.rawValue)")
-                                }
-                                
-                                HStack {
-                                    Text("Target:").bold()
-                                    Spacer()
-                                    Text("\(state.target, specifier: "%.1f") \(state.units.rawValue)")
-                                }
-                            }
-                            
-                            Divider()
-                            
-                            // Insulin components
-                            Group {
-                                if state.log_manualCarbEntry_used > 0 {
-                                    HStack {
-                                        Text("Carbs Used:").bold()
-                                        Spacer()
-                                        Text("\(state.log_manualCarbEntry_used, specifier: "%.1f") g → \(state.roundedLatestCarbEntryInsulin, specifier: "%.2f") U")
-                                            .foregroundStyle(Color(.loopYellow))
-                                    }
-                                }
-                                
-                                HStack {
-                                    Text("COB:").bold()
-                                    Spacer()
-                                    Text("\(state.cob, specifier: "%.1f") g → \(state.log_roundedwholeCobInsulin, specifier: "%.2f") U")
-                                        .foregroundStyle(Color(.loopYellow))
-                                }
-                                
-                                if state.log_roundedtargetDifferenceInsulin != 0 {
-                                    HStack {
-                                        Text("BG Correction:").bold()
-                                        Spacer()
-                                        Text("\(state.log_roundedtargetDifferenceInsulin, specifier: "%.2f") U")
-                                            .foregroundStyle(Color(.loopGreen))
-                                    }
-                                }
-                                
-                                if state.iobInsulinReduction != 0 {
-                                    HStack {
-                                        Text("IOB:").bold()
-                                        Spacer()
-                                        Text("\(state.log_roundediobInsulinReduction, specifier: "%.2f") U")
-                                            .foregroundStyle(Color(.insulin))
-                                    }
-                                }
-                            }
-                            
-                            Divider()
-                            
-                            // Safety adjustments
-                            if state.deltaReductionApplied || state.predictionReductionApplied {
-                                Group {
-                                    Text("Safety Adjustments:").bold()
-                                    
-                                    if state.deltaReductionApplied {
-                                        HStack {
-                                            Text("• BG Dropping:")
-                                            Spacer()
-                                            Text("\(state.deltaBG, specifier: "%.1f") mg/dL/5min")
-                                                .foregroundStyle(.orange)
-                                        }
-                                        .padding(.leading, 8)
-                                    }
-                                    
-                                    if state.predictionReductionApplied {
-                                        HStack {
-                                            Text("• Low BG Predicted:")
-                                            Spacer()
-                                            Text("\(state.minPredBG, specifier: "%.1f") \(state.units.rawValue)")
-                                                .foregroundStyle(.orange)
-                                        }
-                                        .padding(.leading, 8)
-                                    }
-                                }
-                                
-                                Divider()
-                            }
-                            
-                            // Final calculation
-                            HStack {
-                                Text("Final Calculation:").bold()
-                                Spacer()
-                                Text("\(state.insulinCalculated, specifier: "%.2f") U")
-                                    .font(.title3)
-                                    .foregroundStyle(.blue)
-                            }
-                        }
-                        .padding(.vertical, 8)
-                        .padding(.horizontal, 4)
+                    VStack(alignment: .leading, spacing: 8) {
+                        // Basic parameters only - minimal code
+                        Text("Carb Ratio: \(state.carbRatio)")
+                        Text("ISF: \(state.isf)")
+                        Text("Current BG: \(state.currentBG)")
+                        Text("Target: \(state.target)")
+                        
+                        Divider()
+                        
+                        // Final calculation - minimal code
+                        Text("Final Calculation: \(state.insulinCalculated)")
                     }
-                    .frame(maxHeight: 300)
+                    .padding(.vertical, 8)
                 },
                 label: {
                     HStack {
                         Image(systemName: "info.circle")
-                            .foregroundStyle(.blue)
                         Text("Calculation Details")
-                            .font(.system(size: 14, weight: .medium))
                         Spacer()
                     }
                 }
             )
-            .accentColor(.blue)
         }
-        .padding(.vertical, 4)
     }
     footer: {
         if (-1 * state.loopDate.timeIntervalSinceNow / 60) > state.loopReminder, let string = state.lastLoop() {
