@@ -166,30 +166,17 @@ extension Bolus {
             }
         }
 
-       // Enhanced version with date check
-func getEffectiveRecentCarbs() -> Decimal {
-    // If we have a manually specified entry from UI, use it first
-    if manualCarbEntry > 0 {
-        return manualCarbEntry
-    }
-    
-    // Check for recent entries in carbToStore with date check
-    if !carbToStore.isEmpty {
-        let entry = carbToStore[0]
-        if entry.carbs > 0 {
-            // Check if the entry is recent (within last 120 seconds)
-            if let createdAt = entry.createdAt {
-                let timeInterval = Date().timeIntervalSince(createdAt)
-                if timeInterval < 120 {
-                    return entry.carbs
-                }
+       // Intermediate version of getEffectiveRecentCarbs
+        func getEffectiveRecentCarbs() -> Decimal {
+            // If we have a manually specified entry from UI, use it first
+            if manualCarbEntry > 0 {
+                return manualCarbEntry
             }
-        }
-    }
     
-    // Otherwise use COB if available
-    return cob > 0 ? cob : 0
-}
+            // Fall back to existing logic of max(cob, recentCarbs)
+            return max(cob, recentCarbs)
+        }
+
         
         func calculateInsulin() -> Decimal {
             // The actual glucose threshold
@@ -214,7 +201,8 @@ func getEffectiveRecentCarbs() -> Decimal {
 
             // determine whole COB for which we want to dose insulin for and then determine insulin for wholeCOB
             // If failed recent suggestion use recent carb entry
-            wholeCobInsulin = carbRatio != 0 ? max(cob, recentCarbs) / carbRatio : 0
+            let effectiveCarbs = getEffectiveRecentCarbs()
+            wholeCobInsulin = carbRatio != 0 ? effectiveCarbs / carbRatio : 0
 
             // determine how much the calculator reduces/ increases the bolus because of IOB
             // If failed recent suggestion use recent IOB value
