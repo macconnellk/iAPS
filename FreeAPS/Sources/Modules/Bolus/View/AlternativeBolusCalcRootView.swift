@@ -46,46 +46,7 @@ extension Bolus {
             formatter.numberStyle = .decimal
             if state.units == .mmolL {
                 formatter.maximumFractionDigits = 1
-            }
-        
-        var predictionChart: some View {
-            ZStack {
-                PredictionView(
-                    predictions: $state.predictions, units: $state.units, eventualBG: $state.evBG,
-                    useEventualBG: $state.eventualBG, target: $state.target,
-                    displayPredictions: $state.displayPredictions, currentGlucose: $state.currentBG
-                )
-            }
-        }
-
-        private var disabled: Bool {
-            state.amount <= 0 || state.amount > state.maxBolus
-        }
-
-        var changed: Bool {
-            ((meal.first?.carbs ?? 0) > 0) || ((meal.first?.fat ?? 0) > 0) || ((meal.first?.protein ?? 0) > 0)
-        }
-
-        var hasFatOrProtein: Bool {
-            ((meal.first?.fat ?? 0) > 0) || ((meal.first?.protein ?? 0) > 0)
-        }
-
-        private func illustrationView() -> some View {
-            VStack {
-                IllustrationView(data: $state.data)
-
-                // Hide button
-                VStack {
-                    Button { showInfo = false }
-                    label: { Text("Hide") }.frame(maxWidth: .infinity, alignment: .center)
-                        .tint(.blue)
-                }.padding(.bottom, 20)
-            }
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color(colorScheme == .dark ? UIColor.systemGray4 : UIColor.systemGray5))
-            )
-        } else { formatter.maximumFractionDigits = 0 }
+            } else { formatter.maximumFractionDigits = 0 }
             return formatter
         }
 
@@ -120,6 +81,44 @@ extension Bolus {
                                     isDisabled: false,
                                     liveEditing: true
                                 )
+                            }.onChange(of: state.manualGlucose) {
+                                state.insulinCalculated = state.calculateInsulin()
+                            }
+                        } header: { Text("Missing Glucose") }
+                    }
+                }
+
+                Section {}
+                if fetch {
+                    Section { mealEntries.asAny() }
+                }
+
+                Section {
+                    if !state.waitForSuggestion {
+                        HStack {
+                            Button(action: {
+                                showInfo.toggle()
+                            }, label: {
+                                Image(systemName: "info.bubble")
+                                    .symbolRenderingMode(.palette)
+                                    .foregroundStyle(colorScheme == .light ? .black : .white, .blue)
+                                    .font(.infoSymbolFont)
+                                Text("Calculations")
+                            })
+                                .foregroundStyle(.blue)
+                                .font(.footnote)
+                                .buttonStyle(PlainButtonStyle())
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            if state.fattyMeals {
+                                Spacer()
+                                Toggle(isOn: $state.useFattyMealCorrectionFactor) {
+                                    Text("Fatty Meal")
+                                }
+                                .toggleStyle(CheckboxToggleStyle())
+                                .font(.footnote)
+                                .onChange(of: state.useFattyMealCorrectionFactor) {
+                                    state.insulinCalculated = state.calculateInsulin()
+                                }
                             }
                         }
                     }
@@ -215,13 +214,6 @@ extension Bolus {
                         .frame(maxWidth: .infinity, alignment: .center)
                         .listRowBackground(Color(.systemBlue))
                         .tint(.white)
-                        
-                        // Add calculation log display
-                        HStack {  
-                            let logMessage = state.logMessage
-                            Text("Calcs: " + (logMessage.isEmpty ? "" : "(\(logMessage))"))
-                            .font(.system(size: 13)) // Adjust the font size here
-                        }
                     }
                     footer: {
                         if (-1 * state.loopDate.timeIntervalSinceNow / 60) > state.loopReminder, let string = state.lastLoop() {
@@ -230,56 +222,93 @@ extension Bolus {
                                 .foregroundStyle(.orange)
                         }
                     }
-                }.onChange(of: state.manualGlucose) {
-                                // Recalculate insulin when manual glucose changes
-                                state.insulinCalculated = state.calculateInsulin()
-                            }
-                        } header: { Text("Missing Glucose") }
+                }
+            }
+            .interactiveDismissDisabled()
+            .compactSectionSpacing()
+            .alert(isPresented: $isRemoteBolusAlertPresented) {
+                remoteBolusAlert!
+            }
+            .dynamicTypeSize(...DynamicTypeSize.xxLarge)
+            .navigationTitle("Enact Bolus")
+            .navigationBarTitleDisplayMode(.inline)
+            .navigationBarItems(
+                leading: Button {
+                    keepForNextWiew = state.carbsView(fetch: fetch, hasFatOrProtein: hasFatOrProtein, mealSummary: meal)
+                }
+                label: {
+                    HStack {
+                        Image(systemName: "chevron.backward")
+                        Text("Meal")
                     }
+                },
+                trailing: Button {
+                    state.hideModal()
+                    state.notActive()
+                    if fetch { state.apsManager.determineBasalSync() }
                 }
-
-                Section {}
-                if fetch {
-                    Section { mealEntries.asAny() }
+                label: { Text("Cancel") }
+            )
+            .onAppear {
+                configureView {
+                    state.viewActive()
+                    state.waitForCarbs = fetch
+                    state.waitForSuggestionInitial = waitForSuggestion
+                    state.waitForSuggestion = waitForSuggestion
+                    state.insulinCalculated = state.calculateInsulin()
                 }
+            }
+            .popup(isPresented: showInfo, alignment: .bottom, direction: .center, type: .default) {
+                illustrationView()
+            }
+        }
 
-                Section {
-                    if !state.waitForSuggestion {
-                        HStack {
-                            Button(action: {
-                                showInfo.toggle()
-                            }, label: {
-                                Image(systemName: "info.bubble")
-                                    .symbolRenderingMode(.palette)
-                                    .foregroundStyle(colorScheme == .light ? .black : .white, .blue)
-                                    .font(.infoSymbolFont)
-                                Text("Calculations")
-                            })
-                                .foregroundStyle(.blue)
-                                .font(.footnote)
-                                .buttonStyle(PlainButtonStyle())
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                            
-                            // Repurpose Fatty Meals toggle to enable calculation using latest carbs
-                            if state.fattyMeals {
-                                Spacer()
-                                Toggle(isOn: $state.useFattyMealCorrectionFactor) {
-                                    Text("Calculate Insulin")
-                                }
-                                .toggleStyle(CheckboxToggleStyle())
-                                .font(.footnote)
-                                .onChange(of: state.useFattyMealCorrectionFactor) { _ in 
-                                    // If new carbs have been entered in the last 2 minutes
-                                    if let createdAt = meal.first?.createdAt,
-                                       Date().timeIntervalSince(createdAt) < 120,
-                                       let carbs = meal.first?.carbs, carbs > 0 {
-                                        // Use the carbs value from meal
-                                        state.manualCarbEntry = Decimal(carbs)
-                                        state.insulinCalculated = state.calculateInsulin()
-                                    } else {
-                                        // No recent meal detected
-                                        state.manualCarbEntry = 0
-                                        state.insulinCalculated = state.calculateInsulin()
-                                    }
-                                } 
-                            }
+        var predictionChart: some View {
+            ZStack {
+                PredictionView(
+                    predictions: $state.predictions, units: $state.units, eventualBG: $state.evBG,
+                    useEventualBG: $state.eventualBG, target: $state.target,
+                    displayPredictions: $state.displayPredictions, currentGlucose: $state.currentBG
+                )
+            }
+        }
+
+        private var disabled: Bool {
+            state.amount <= 0 || state.amount > state.maxBolus
+        }
+
+        var changed: Bool {
+            ((meal.first?.carbs ?? 0) > 0) || ((meal.first?.fat ?? 0) > 0) || ((meal.first?.protein ?? 0) > 0)
+        }
+
+        var hasFatOrProtein: Bool {
+            ((meal.first?.fat ?? 0) > 0) || ((meal.first?.protein ?? 0) > 0)
+        }
+
+        func carbsView() {
+            if fetch {
+                keepForNextWiew = true
+                state.backToCarbsView(override: false, editMode: true)
+            } else {
+                state.backToCarbsView(override: true, editMode: false)
+            }
+        }
+
+        private func illustrationView() -> some View {
+            VStack {
+                IllustrationView(data: $state.data)
+
+                // Hide button
+                VStack {
+                    Button { showInfo = false }
+                    label: { Text("Hide") }.frame(maxWidth: .infinity, alignment: .center)
+                        .tint(.blue)
+                }.padding(.bottom, 20)
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .fill(Color(colorScheme == .dark ? UIColor.systemGray4 : UIColor.systemGray5))
+            )
+        }
+    }
+}
