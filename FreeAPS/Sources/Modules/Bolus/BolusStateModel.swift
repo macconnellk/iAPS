@@ -267,7 +267,7 @@ extension Bolus {
             }
     
            
-            // Calculate detailed log values for display
+           // Calculate detailed log values for display
 if effectiveCarbs > 0 {
     // Calculate insulin for latest carb entry
     latestCarbEntryInsulin = (effectiveCarbs / carbRatio)
@@ -289,59 +289,63 @@ if effectiveCarbs > 0 {
     log_roundediobInsulinReduction = Decimal(round(100 * Log_iobInsulinReductionAsDouble) / 100)
     
     // Create decision path log message
-    logMessage = "DECISION PATH:\n"
+    logMessage = "Bolus Calculation:\n"
     
-    // 1. Carb source decision
+    // Source info
     if manualCarbEntry > 0 {
-        logMessage += "• Used manual entry: \(manualCarbEntry)g"
-        if manualCarbEntry > cob {
-            logMessage += " (larger than COB: \(cob)g)\n"
-        } else {
-            logMessage += " (smaller than COB: \(cob)g)\n"
-        }
-    } else {
-        logMessage += "• Used COB: \(cob)g (no manual entry)\n"
+        logMessage += "• Manual carbs: \(manualCarbEntry)g\n"
     }
+    logMessage += "• System COB: \(cob)g\n"
     
-    // 2. Max approach decision
-    logMessage += "• \(log_COBapproach):\n"
-    logMessage += "  - COB insulin: \(log_roundedwholeCobInsulin) U\n"
-    logMessage += "  - Manual carb insulin: \(roundedLatestCarbEntryInsulin) U\n"
+    // Which approach was used
+    logMessage += "• \(log_COBapproach)\n"
     
-    // 3. Total calculation components
-    logMessage += "• Full calculation (\(log_roundedWholeCalc) U):\n"
-    logMessage += "  - Carbs: \(log_roundedwholeCobInsulin) U\n"
-    logMessage += "  - Correction: \(log_roundedtargetDifferenceInsulin) U\n"
-    logMessage += "  - IOB: \(log_roundediobInsulinReduction) U\n"
+    // Full calculation
+    logMessage += "• BG correction: \(log_roundedtargetDifferenceInsulin) U\n"
+    logMessage += "• IOB: \(log_roundediobInsulinReduction) U\n"
     
-    // 4. Manual-only calculation
-    logMessage += "• Manual entry calculation (\(roundedwholeCalc_carbs) U):\n"
-    logMessage += "  - Carbs: \(roundedLatestCarbEntryInsulin) U\n"
-    logMessage += "  - Correction: \(log_roundedtargetDifferenceInsulin) U\n"
-    
-    // 5. Final decision
+    // Decision
     let originalWholeCalc = wholeCalc
     wholeCalc = min(wholeCalc, wholeCalc_carbs)
     if wholeCalc < originalWholeCalc {
-        logMessage += "\n→ USED MANUAL ENTRY CALCULATION to prevent double-counting carbs\n"
-    } else if wholeCalc_carbs < originalWholeCalc {
-        logMessage += "\n→ USED COMBINED CALCULATION for maximum coverage\n"
+        logMessage += "\n→ USING MANUAL ENTRY: \(roundedwholeCalc_carbs) U (prevents double-counting)\n"
     } else {
-        logMessage += "\n→ Both calculations equal\n"
+        logMessage += "\n→ USING COMBINED CALC: \(log_roundedWholeCalc) U\n"
     }
     
-    // Add fraction adjustment explanation if applicable
+    // Fraction adjustment
     if manualCarbEntry > maxCOB {
-        logMessage += "• Applied fraction multiplier (\(fraction)) for carbs above maxCOB\n"
+        logMessage += "• Applied multiplier (\(fraction)) for carbs above maxCOB\n"
     }
 } else {
     // Log message when no carbs are present
     let Log_wholeCalcAsDouble = Double(wholeCalc)
     log_roundedWholeCalc = Decimal(round(100 * Log_wholeCalcAsDouble) / 100)
-    logMessage = "No carbs entered. Based only on BG correction and IOB.\n"
-    logMessage += "• Correction: \(targetDifferenceInsulin) U\n"
+    logMessage = "No carbs entered.\n"
+    logMessage += "• BG correction: \(targetDifferenceInsulin) U\n"
     logMessage += "• IOB: \(iobInsulinReduction) U\n"
     logMessage += "• Total: \(log_roundedWholeCalc) U"
+}
+
+// THEN LATER IN THE CODE, after all the safety calculations are done
+// (before the final return statement), add this:
+
+// Add safety information to the log
+if deltaReductionApplied || predictionReductionApplied {
+    logMessage += "\n== SAFETY REDUCTIONS APPLIED =="
+    
+    if deltaReductionApplied {
+        logMessage += "\n• BG dropping rapidly: \(deltaBG)"
+    }
+    
+    if predictionReductionApplied {
+        logMessage += "\n• Low BG predicted: \(minPredBG)"
+        if minPredBG <= (units == .mmolL ? Decimal(3.3) : Decimal(60)) {
+            logMessage += " - ZEROED INSULIN FOR SAFETY"
+        }
+    }
+    
+    logMessage += "\n→ FINAL INSULIN AFTER SAFETY: \(insulinCalculated) U"
 }
     
     // Round values
@@ -420,6 +424,24 @@ if effectiveCarbs > 0 {
 
     prepareData()
 
+// Add safety information to the log RIGHT HERE
+if deltaReductionApplied || predictionReductionApplied {
+    logMessage += "\n== SAFETY REDUCTIONS APPLIED =="
+    
+    if deltaReductionApplied {
+        logMessage += "\n• BG dropping rapidly: \(deltaBG)"
+    }
+    
+    if predictionReductionApplied {
+        logMessage += "\n• Low BG predicted: \(minPredBG)"
+        if minPredBG <= (units == .mmolL ? Decimal(3.3) : Decimal(60)) {
+            logMessage += " - ZEROED INSULIN FOR SAFETY"
+        }
+    }
+    
+    logMessage += "\n→ FINAL INSULIN AFTER SAFETY: \(insulinCalculated) U"
+}
+            
     return insulinCalculated
 }
 
