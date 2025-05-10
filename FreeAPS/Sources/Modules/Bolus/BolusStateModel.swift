@@ -266,45 +266,83 @@ extension Bolus {
                 wholeCalc = (targetDifferenceInsulin + iobInsulinReduction + wholeCobInsulin)
             }
     
+           
             // Calculate detailed log values for display
-            if effectiveCarbs > 0 {
-                // Calculate insulin for latest carb entry
-                latestCarbEntryInsulin = (effectiveCarbs / carbRatio)
-                wholeCalc_carbs = latestCarbEntryInsulin + targetDifferenceInsulin
-                log_manualCarbEntry_used = effectiveCarbs
-        
-                // Format values for logging
-                let wholeCalc_carbsAsDouble = Double(wholeCalc_carbs)
-                roundedwholeCalc_carbs = Decimal(round(100 * wholeCalc_carbsAsDouble) / 100)
-        let latestCarbEntryInsulinAsDouble = Double(latestCarbEntryInsulin)
-        roundedLatestCarbEntryInsulin = Decimal(round(100 * latestCarbEntryInsulinAsDouble) / 100)
-        let Log_wholeCalcAsDouble = Double(wholeCalc)
-        log_roundedWholeCalc = Decimal(round(100 * Log_wholeCalcAsDouble) / 100)
-        let Log_targetDifferenceInsulinAsDouble = Double(targetDifferenceInsulin)
-        log_roundedtargetDifferenceInsulin = Decimal(round(100 * Log_targetDifferenceInsulinAsDouble) / 100)
-        let Log_wholeCobInsulinAsDouble = Double(wholeCobInsulin)
-        log_roundedwholeCobInsulin = Decimal(round(100 * Log_wholeCobInsulinAsDouble) / 100)
-        let Log_iobInsulinReductionAsDouble = Double(iobInsulinReduction)
-        log_roundediobInsulinReduction = Decimal(round(100 * Log_iobInsulinReductionAsDouble) / 100)
-        
-        // Create detailed log message
-        logMessage = "CR: \(carbRatio). \nCOB Approach: \(cob) " +
-            "--> \(log_roundedWholeCalc) U\n" +
-            "-------> Correction: \(log_roundedtargetDifferenceInsulin) U\n" +
-            "-------> IOB: \(log_roundediobInsulinReduction) U\n" +
-            "-------> COB: \(log_roundedwholeCobInsulin) U \(log_COBapproach)\n" +
-            "Carbs Used: \(log_manualCarbEntry_used) ----> \(roundedwholeCalc_carbs) U\n" +
-            "-------> Carbs: \(roundedLatestCarbEntryInsulin) U " + 
-            "-------> Correction: \(log_roundedtargetDifferenceInsulin) U"
-            
-        wholeCalc = min(wholeCalc, wholeCalc_carbs)
+if effectiveCarbs > 0 {
+    // Calculate insulin for latest carb entry
+    latestCarbEntryInsulin = (effectiveCarbs / carbRatio)
+    wholeCalc_carbs = latestCarbEntryInsulin + targetDifferenceInsulin
+    log_manualCarbEntry_used = effectiveCarbs
+    
+    // Format values for logging
+    let wholeCalc_carbsAsDouble = Double(wholeCalc_carbs)
+    roundedwholeCalc_carbs = Decimal(round(100 * wholeCalc_carbsAsDouble) / 100)
+    let latestCarbEntryInsulinAsDouble = Double(latestCarbEntryInsulin)
+    roundedLatestCarbEntryInsulin = Decimal(round(100 * latestCarbEntryInsulinAsDouble) / 100)
+    let Log_wholeCalcAsDouble = Double(wholeCalc)
+    log_roundedWholeCalc = Decimal(round(100 * Log_wholeCalcAsDouble) / 100)
+    let Log_targetDifferenceInsulinAsDouble = Double(targetDifferenceInsulin)
+    log_roundedtargetDifferenceInsulin = Decimal(round(100 * Log_targetDifferenceInsulinAsDouble) / 100)
+    let Log_wholeCobInsulinAsDouble = Double(wholeCobInsulin)
+    log_roundedwholeCobInsulin = Decimal(round(100 * Log_wholeCobInsulinAsDouble) / 100)
+    let Log_iobInsulinReductionAsDouble = Double(iobInsulinReduction)
+    log_roundediobInsulinReduction = Decimal(round(100 * Log_iobInsulinReductionAsDouble) / 100)
+    
+    // Create decision path log message
+    logMessage = "DECISION PATH:\n"
+    
+    // 1. Carb source decision
+    if manualCarbEntry > 0 {
+        logMessage += "• Used manual entry: \(manualCarbEntry)g"
+        if manualCarbEntry > cob {
+            logMessage += " (larger than COB: \(cob)g)\n"
+        } else {
+            logMessage += " (smaller than COB: \(cob)g)\n"
+        }
     } else {
-        // Log message when no carbs are present
-        let Log_wholeCalcAsDouble = Double(wholeCalc)
-        log_roundedWholeCalc = Decimal(round(100 * Log_wholeCalcAsDouble) / 100)
-        logMessage = "CR: \(carbRatio). \nCOB Approach: \(cob) \n" +
-                    "No New Carbs. Recommendation: \(log_roundedWholeCalc)"
+        logMessage += "• Used COB: \(cob)g (no manual entry)\n"
     }
+    
+    // 2. Max approach decision
+    logMessage += "• \(log_COBapproach):\n"
+    logMessage += "  - COB insulin: \(log_roundedwholeCobInsulin) U\n"
+    logMessage += "  - Manual carb insulin: \(roundedLatestCarbEntryInsulin) U\n"
+    
+    // 3. Total calculation components
+    logMessage += "• Full calculation (\(log_roundedWholeCalc) U):\n"
+    logMessage += "  - Carbs: \(log_roundedwholeCobInsulin) U\n"
+    logMessage += "  - Correction: \(log_roundedtargetDifferenceInsulin) U\n"
+    logMessage += "  - IOB: \(log_roundediobInsulinReduction) U\n"
+    
+    // 4. Manual-only calculation
+    logMessage += "• Manual entry calculation (\(roundedwholeCalc_carbs) U):\n"
+    logMessage += "  - Carbs: \(roundedLatestCarbEntryInsulin) U\n"
+    logMessage += "  - Correction: \(log_roundedtargetDifferenceInsulin) U\n"
+    
+    // 5. Final decision
+    let originalWholeCalc = wholeCalc
+    wholeCalc = min(wholeCalc, wholeCalc_carbs)
+    if wholeCalc < originalWholeCalc {
+        logMessage += "\n→ USED MANUAL ENTRY CALCULATION to prevent double-counting carbs\n"
+    } else if wholeCalc_carbs < originalWholeCalc {
+        logMessage += "\n→ USED COMBINED CALCULATION for maximum coverage\n"
+    } else {
+        logMessage += "\n→ Both calculations equal\n"
+    }
+    
+    // Add fraction adjustment explanation if applicable
+    if manualCarbEntry > maxCOB {
+        logMessage += "• Applied fraction multiplier (\(fraction)) for carbs above maxCOB\n"
+    }
+} else {
+    // Log message when no carbs are present
+    let Log_wholeCalcAsDouble = Double(wholeCalc)
+    log_roundedWholeCalc = Decimal(round(100 * Log_wholeCalcAsDouble) / 100)
+    logMessage = "No carbs entered. Based only on BG correction and IOB.\n"
+    logMessage += "• Correction: \(targetDifferenceInsulin) U\n"
+    logMessage += "• IOB: \(iobInsulinReduction) U\n"
+    logMessage += "• Total: \(log_roundedWholeCalc) U"
+}
     
     // Round values
     let wholeCalcAsDouble = Double(wholeCalc)
