@@ -326,21 +326,91 @@ extension Bolus {
             }
         }
 
-        private func illustrationView() -> some View {
-            VStack {
-                IllustrationView(data: $state.data)
+       // Update the illustrationView() method in AlternativeBolusCalcRootView.swift:
 
-                // Hide button
-                VStack {
-                    Button { showInfo = false }
-                    label: { Text("Hide") }.frame(maxWidth: .infinity, alignment: .center)
-                        .tint(.blue)
-                }.padding(.bottom, 20)
+private func illustrationView() -> some View {
+    VStack {
+        if showInfo {
+            // Calculation info view
+            ScrollView {
+                VStack(alignment: .leading, spacing: 6) {
+                    Group {
+                        HStack {
+                            Text("Carb Ratio:")
+                                .bold()
+                            Spacer()
+                            Text("\(state.carbRatio, specifier: "%.1f")")
+                        }
+                        
+                        HStack {
+                            Text("ISF:")
+                                .bold()
+                            Spacer()
+                            Text("\(state.isf, specifier: "%.1f") \(state.units.rawValue)/U")
+                        }
+                        
+                        HStack {
+                            Text("Current BG:")
+                                .bold()
+                            Spacer()
+                            Text("\(state.currentBG, specifier: "%.1f") \(state.units.rawValue)")
+                        }
+                        
+                        HStack {
+                            Text("Target:")
+                                .bold()
+                            Spacer()
+                            Text("\(state.target, specifier: "%.1f") \(state.units.rawValue)")
+                        }
+                        
+                        Divider()
+                    }
+                    
+                    // Decision path info - display the actual log message
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Decision Path:")
+                            .bold()
+                            .padding(.top, 4)
+                        
+                        Text(state.logMessage)
+                            .font(.system(.body, design: .monospaced))
+                            .fixedSize(horizontal: false, vertical: true)
+                            .lineLimit(nil)
+                    }
+                    
+                    Divider()
+                    
+                    // Final calculation
+                    HStack {
+                        Text("Final Calculation:")
+                            .bold()
+                        Spacer()
+                        Text("\(state.insulinCalculated, specifier: "%.2f") U")
+                            .font(.title3)
+                            .foregroundStyle(.blue)
+                    }
+                }
+                .padding(.vertical, 8)
+                .padding(.horizontal, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .background(
-                RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color(colorScheme == .dark ? UIColor.systemGray4 : UIColor.systemGray5))
-            )
+            .frame(maxHeight: 400)
+        } else {
+            // Standard chart view
+            IllustrationView(data: $state.data)
         }
+
+        // Hide button
+        VStack {
+            Button { showInfo = false }
+            label: { Text("Hide") }.frame(maxWidth: .infinity, alignment: .center)
+                .tint(.blue)
+        }.padding(.bottom, 20)
+    }
+    .background(
+        RoundedRectangle(cornerRadius: 8, style: .continuous)
+            .fill(Color(colorScheme == .dark ? UIColor.systemGray4 : UIColor.systemGray5))
+    )
+}
     }
 }
