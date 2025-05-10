@@ -326,27 +326,6 @@ if effectiveCarbs > 0 {
     logMessage += "• IOB: \(iobInsulinReduction) U\n"
     logMessage += "• Total: \(log_roundedWholeCalc) U"
 }
-
-// THEN LATER IN THE CODE, after all the safety calculations are done
-// (before the final return statement), add this:
-
-// Add safety information to the log
-if deltaReductionApplied || predictionReductionApplied {
-    logMessage += "\n== SAFETY REDUCTIONS APPLIED =="
-    
-    if deltaReductionApplied {
-        logMessage += "\n• BG dropping rapidly: \(deltaBG)"
-    }
-    
-    if predictionReductionApplied {
-        logMessage += "\n• Low BG predicted: \(minPredBG)"
-        if minPredBG <= (units == .mmolL ? Decimal(3.3) : Decimal(60)) {
-            logMessage += " - ZEROED INSULIN FOR SAFETY"
-        }
-    }
-    
-    logMessage += "\n→ FINAL INSULIN AFTER SAFETY: \(insulinCalculated) U"
-}
     
     // Round values
     let wholeCalcAsDouble = Double(wholeCalc)
@@ -424,7 +403,6 @@ if deltaReductionApplied || predictionReductionApplied {
 
     prepareData()
 
-// Add safety information to the log RIGHT HERE
 if deltaReductionApplied || predictionReductionApplied {
     logMessage += "\n== SAFETY REDUCTIONS APPLIED =="
     
