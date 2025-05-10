@@ -216,20 +216,33 @@ extension Bolus {
         .tint(.white)
         
         // REPLACE THE EXISTING CALCULATION LOG CODE WITH THIS:
-        VStack(alignment: .leading) {
+                VStack(alignment: .leading) {
             DisclosureGroup(
                 content: {
                     VStack(alignment: .leading, spacing: 8) {
-                        // Basic parameters only - minimal code
+                        // Basic parameters - keep these
                         Text("Carb Ratio: \(state.carbRatio)")
                         Text("ISF: \(state.isf)")
-                        Text("Current BG: \(state.currentBG)")
+                         Text("Current BG: \(state.currentBG)")
                         Text("Target: \(state.target)")
-                        
+                
                         Divider()
-                        
-                        // Final calculation - minimal code
+                
+                        // Add log message here
+                        Text("Decision Path:")
+                            .fontWeight(.bold)
+                            .padding(.top, 4)
+                
+                        Text(state.logMessage)
+                            .font(.system(size: 11))
+                            .padding(.vertical, 2)
+                            .lineLimit(nil)
+                
+                        Divider()
+                
+                        // Keep the final calculation
                         Text("Final Calculation: \(state.insulinCalculated)")
+                            .fontWeight(.bold)
                     }
                     .padding(.vertical, 8)
                 },
