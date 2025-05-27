@@ -205,6 +205,7 @@ extension Bolus {
                             keepForNextWiew = true
                             state.save()
                             state.showModal(for: nil)
+                            // NEW BASE ADDITION: Save manual glucose if entered
                             if state.currentBG == 0, state.manualGlucose != 0 {
                                 state.addManualGlucose()
                             }
@@ -217,6 +218,30 @@ extension Bolus {
                         .frame(maxWidth: .infinity, alignment: .center)
                         .listRowBackground(Color(.systemBlue))
                         .tint(.white)
+                        
+                        // YOUR ADDITION: CALCULATION DETAILS SECTION
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text("Calculation Details")
+                                .fontWeight(.bold)
+                                .font(.headline)
+                           
+                            // Add log message here (direct, no toggle)
+                            Text(state.logMessage)
+                                .font(.system(size: 13))
+                                .padding(.vertical, 2)
+                                .lineLimit(nil)
+                           
+                            // Final recommendation
+                            HStack {
+                                Text("Final Recommendation:")
+                                    .fontWeight(.bold)
+                                Spacer()
+                                Text("\(formatter.string(from: Double(state.insulinCalculated) as NSNumber) ?? "0") U")
+                                    .fontWeight(.bold)
+                            }
+                            .padding(.top, 4)
+                        }
+                        .padding(.vertical, 8)
                     }
                     footer: {
                         if (-1 * state.loopDate.timeIntervalSinceNow / 60) > state.loopReminder, let string = state.lastLoop() {
@@ -258,6 +283,10 @@ extension Bolus {
                     state.waitForCarbs = fetch
                     state.waitForSuggestionInitial = waitForSuggestion
                     state.waitForSuggestion = waitForSuggestion
+                    // YOUR ADDITION: Initialize carb entry from meal data
+                    if let carbs = meal.first?.carbs, carbs > 0 {
+                        state.manualCarbEntry = Decimal(carbs)
+                    }
                     state.insulinCalculated = state.calculateInsulin()
                 }
             }
