@@ -75,7 +75,7 @@ extension Bolus {
         @Published var carbToStore = [CarbsEntry]()
         @Published var history: [PumpHistoryEvent]?
 
-        // Additional properties from your enhanced version
+        // YOUR ENHANCED LOGGING PROPERTIES
         @Published var maxCOB: Decimal = 0
         @Published var roundedWholeCalc: Decimal = 0
         @Published var latestCarbEntryInsulin: Decimal = 0
@@ -118,6 +118,7 @@ extension Bolus {
             minimumPrediction = settingsManager.settings.minumimPrediction
             threshold = settingsManager.preferences.threshold_setting
             maxBolus = provider.pumpSettings().maxBolus
+            // YOUR ADDITION: maxCOB setting
             maxCOB = settings.preferences.maxCOB
             fraction = settings.settings.overrideFactor
             useCalc = settings.settings.useCalc
@@ -165,13 +166,14 @@ extension Bolus {
             }
             deltaBG = Decimal(lastGlucose.glucose + glucose[1].glucose) / 2 -
                 (Decimal(glucose[3].glucose + glucose[2].glucose) / 2)
-
+            
+            // YOUR ADDITION: Set currentBG if it's 0 and glucose is recent
             if currentBG == 0, (lastGlucose.date ?? .distantPast).timeIntervalSinceNow > -5.minutes.timeInterval {
                 currentBG = Decimal(lastGlucose.glucose)
             }
         }
 
-        // Simplified rounding function
+        // YOUR ADDITION: Rounding helper function
         func roundToHundredth(_ value: Decimal) -> Decimal {
             var result = value
             var roundedValue = Decimal()
@@ -180,7 +182,7 @@ extension Bolus {
             return roundedValue
         }
 
-        // get manual carb entry if within last 10 minutes (600 seconds)
+        // YOUR ADDITION: Get effective recent carbs
         func getEffectiveRecentCarbs() -> Decimal {
             // Only consider manual carb entries less than 10 minutes old
             if manualCarbEntry > 0 && Date().timeIntervalSince(mostRecentCarbEntryTime) < 600 {
@@ -190,72 +192,7 @@ extension Bolus {
             return 0
         }
 
-        func checkForMultipleCarbEntries() -> Decimal {
-            // This is a one-time check that doesn't persist state between calls
-            
-            // Get current timestamp and 20 minutes ago
-            let now = Date()
-            let twentyMinutesAgo = now.addingTimeInterval(-20 * 60)
-            
-            // Use the CoreDataStorage directly to query recent meals
-            let fetchRequest: NSFetchRequest<Meals> = Meals.fetchRequest()
-            fetchRequest.predicate = NSPredicate(format: "createdAt >= %@", twentyMinutesAgo as NSDate)
-            
-            var recentEntries: [Meals] = []
-            do {
-                recentEntries = try coreDataStorage.viewContext.fetch(fetchRequest)
-            } catch {
-                logMessage += "\nError fetching recent entries: \(error.localizedDescription)"
-                return 0
-            }
-            
-            // Calculate total carbs in window
-            let totalRecentCarbs = recentEntries.reduce(Decimal(0)) { $0 + Decimal($1.carbs) }
-            
-            // Exit early if conditions not met (not enough entries or not exceeding maxCOB)
-            if recentEntries.count <= 1 || totalRecentCarbs <= maxCOB {
-                return 0
-            }
-            
-            // Calculate what would have been given if all entered at once using large meal logic
-            let standardMaxCOBInsulin = maxCOB / carbRatio
-            let largeMealFractionInsulin = (totalRecentCarbs / carbRatio) * fraction
-            let totalInsulinRequired = max(standardMaxCOBInsulin, largeMealFractionInsulin)
-            
-            // Add BG correction if needed
-            let bgCorrection = currentBG > target ? (currentBG - target) / isf : 0
-            let totalRequiredWithCorrection = totalInsulinRequired + bgCorrection
-            
-            // Subtract current IOB to get the net additional insulin needed
-            var additionalInsulinNeeded = max(0, totalRequiredWithCorrection - iob)
-            
-            // Apply delta BG safety logic
-            if additionalInsulinNeeded > 0 {
-                if deltaBG <= -45 && currentBG < (threshold + 50) {
-                    // Double arrow down rate (>3 mg/dL/min drop)
-                    additionalInsulinNeeded = additionalInsulinNeeded * 0.7
-                    logMessage += "\nVery rapid BG drop \(deltaBG), reducing recommendation to 70%"
-                } else if deltaBG <= -30 && currentBG < (threshold + 30) {
-                    // Single arrow down rate (2-3 mg/dL/min drop)
-                    additionalInsulinNeeded = additionalInsulinNeeded * 0.8
-                    logMessage += "\nRapid BG drop \(deltaBG), reducing recommendation to 80%"
-                }
-            }
-            
-            // Apply maximum cap
-            let safetyMaxAdditionalInsulin: Decimal = 2.0
-            let finalRecommendation = min(additionalInsulinNeeded, safetyMaxAdditionalInsulin)
-            
-            // Detailed logging
-            logMessage += "\n\nMultiple entries within 20 min window: \(roundToHundredth(totalRecentCarbs))g"
-            logMessage += "\nTotal insulin required: \(roundToHundredth(totalInsulinRequired))U"
-            logMessage += "\nWith BG correction: \(roundToHundredth(totalRequiredWithCorrection))U"
-            logMessage += "\nCurrent IOB: \(roundToHundredth(iob))U"
-            logMessage += "\nNet additional insulin needed: \(roundToHundredth(finalRecommendation))U"
-            
-            return roundBolus(finalRecommendation)
-        }
-
+        // YOUR REPLACEMENT: Enhanced calculateInsulin with logging and safety
         func calculateInsulin(manualCarbEntry: Decimal? = nil) -> Decimal {
             let conversion: Decimal = units == .mmolL ? 0.0555 : 1
 
@@ -297,15 +234,15 @@ extension Bolus {
             }
 
             // more or less insulin because of bg trend in the last 15 minutes
-            //Disable bg trend insulin
+            // YOUR MODIFICATION: Disabled trend insulin
             //fifteenMinInsulin = isf == 0 ? 0 : (deltaBG * conversion) / isf
 
-            // Calculate insulin for COB
+            // YOUR ENHANCED COB CALCULATION with logging
             wholeCobInsulin = carbRatio != 0 ? cob / carbRatio : 0
             log_COBapproach = "COB Value"
             logMessage = "Using COB Approach:\n"
 
-            // Assess COB special cases
+            // YOUR ADDITION: Assess COB special cases
             if effectiveCarbs > 0 {
                 // If COB is unexpectedly 0 but we have effectiveCarbs, use effectiveCarbs for COB value up to maxCOB
                 if cob == 0 {
@@ -316,7 +253,6 @@ extension Bolus {
 
                 // For high carb meals, disreagrd maxCOB approach. Allows violation of maxCOB and ensures more insulin dosed up front for high carb meals
                 // Calculate a fraction of the total carb-based insulin and set COB insulin to the higher value
-
                 if effectiveCarbs > maxCOB {
                     carbInsulinFraction = carbRatio != 0 ? effectiveCarbs / carbRatio : 0
                     carbInsulinFraction = carbInsulinFraction * fraction
@@ -329,7 +265,6 @@ extension Bolus {
 
                     wholeCobInsulin = max(wholeCobInsulin, carbInsulinFraction)
                 }
-
             }
 
             // determine how much the calculator reduces the bolus because of IOB; bolus will not be increased for negative IOB
@@ -349,14 +284,13 @@ extension Bolus {
                 wholeCalc = (targetDifferenceInsulin + iobInsulinReduction + wholeCobInsulin)
             }
 
-            // Format values for logging with proper precision
+            // YOUR ADDITION: Format values for logging with proper precision
             log_roundedWholeCalc = roundToHundredth(wholeCalc)
             log_roundedtargetDifferenceInsulin = roundToHundredth(targetDifferenceInsulin)
             log_roundedwholeCobInsulin = roundToHundredth(wholeCobInsulin)
             log_roundediobInsulinReduction = roundToHundredth(iobInsulinReduction)
 
-            // Now calculate insulin for the latest full carb entry if within last ten minutes
-
+            // YOUR ADDITION: Now calculate insulin for the latest full carb entry if within last ten minutes
             if effectiveCarbs > 0 {
                 // Calculate insulin for latest carb entry
                 latestCarbEntryInsulin = (effectiveCarbs / carbRatio)
@@ -378,10 +312,7 @@ extension Bolus {
                 roundedwholeCalc_carbs = roundToHundredth(wholeCalc_carbs)
                 log_roundedWholeCalc = roundToHundredth(wholeCalc)
 
-                // Decision Path will be in the view interface, not in this log message
-                // This log message will contain all the calculation details
-                // We'll start with basic parameters, then key decision path
-
+                // YOUR DETAILED LOGGING
                 logMessage += "Carbs: \(log_manualCarbEntry_used)g, Insulin: \(roundedLatestCarbEntryInsulin)g\n"
             if log_COBapproach == "COB Value" {
                 logMessage += "COB: \(cob)g, Insulin: \(log_roundedwholeCobInsulin)g\n"
@@ -417,7 +348,6 @@ extension Bolus {
                 // IOB component
                 logMessage += "IOB adjustment: \(log_roundediobInsulinReduction)U\n"
             } else {
-
                 // Decision Path at top
                 logMessage = "No New Carbs. Recommendation Disabled, would be\n"
 
@@ -448,7 +378,7 @@ extension Bolus {
             roundedWholeCalc = roundToHundredth(wholeCalc)
 
             // apply custom factor at the end of the calculations
-            // New code moves fraction up to the COB/Carb calculation for Swift Code
+            // YOUR MODIFICATION: New code moves fraction up to the COB/Carb calculation for Swift Code
             let result = !eventualBG ? wholeCalc : insulin * fraction
 
             // apply custom factor if fatty meal toggle in bolus calc config settings is on and the box for fatty meals is checked (in RootView)
@@ -458,7 +388,7 @@ extension Bolus {
                 insulinCalculated = result
             }
 
-            // Reduce insulin if BG is dropping rapidly or lows are predicted
+            // YOUR ADDITION: Reduce insulin if BG is dropping rapidly or lows are predicted
             deltaBasedInsulin = insulinCalculated
             predictionBasedInsulin = insulinCalculated
             let originalInsulin = insulinCalculated
@@ -518,7 +448,6 @@ extension Bolus {
             insulinCalculated = min(max(insulinCalculated, 0), maxBolus)
 
             prepareData()
-
             return insulinCalculated
         }
 
@@ -533,7 +462,7 @@ extension Bolus {
             return temporaryCarbs
         }
 
-        /// When IOB module fail
+        /// When IOB module fail - NEW BASE ENHANCED VERSION
         var recentIOB: Decimal {
             guard iob == 0 else { return 0 }
             guard let recent = coreDataStorage.recentReason() else { return 0 }
@@ -666,6 +595,7 @@ extension Bolus {
             units == .mmolL ? 0.0555 : 1
         }
 
+        // NEW BASE ADDITION: Manual glucose function
         func addManualGlucose() {
             let glucose = units == .mmolL ? manualGlucose.asMgdL : manualGlucose
             let now = Date()
@@ -733,7 +663,7 @@ extension Bolus {
                     isFPU: false
                 )]
 
-                // Store the most recent carb entry time
+                // YOUR ADDITION: Store the most recent carb entry time
                 mostRecentCarbEntryTime = recent.createdAt ?? Date.now
 
                 if let passForward = carbToStore.first {
