@@ -192,16 +192,18 @@ extension Bolus {
             return 0
         }
 
-        // YOUR ADDITION: Multiple carb entry detection (simplified, safer approach)
-func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
-    // For now, disable the CoreData querying to avoid compilation issues
-    // This can be re-enabled once we figure out the exact CoreData structure
-    
-    // Simple version: just check if we have recent carbs and current carbs
+       func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     let effectiveCarbs = getEffectiveRecentCarbs()
     
-    // Only proceed if we have current carbs and they exceed maxCOB
-    guard effectiveCarbs > maxCOB else { return 0 }
+    // DEBUG: Always log what we're seeing
+    logMessage += "\n\nDEBUG: effectiveCarbs = \(effectiveCarbs), maxCOB = \(maxCOB)"
+    logMessage += "\nDEBUG: manualCarbEntry = \(manualCarbEntry)"
+    logMessage += "\nDEBUG: mostRecentCarbEntryTime = \(mostRecentCarbEntryTime)"
+    
+    guard effectiveCarbs > maxCOB else { 
+        logMessage += "\nDEBUG: Guard failed - effectiveCarbs not > maxCOB"
+        return 0 
+    }
     
     // Calculate additional insulin for large meal treatment
     let standardInsulin = effectiveCarbs / carbRatio
@@ -212,10 +214,8 @@ func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     let safetyMaxAdditionalInsulin: Decimal = 2.0
     let finalRecommendation = min(additionalFromLargeMeal, safetyMaxAdditionalInsulin)
     
-    if finalRecommendation > 0 {
-        logMessage += "\n\nLarge meal detected: \(effectiveCarbs)g > maxCOB \(maxCOB)g"
-        logMessage += "\nAdditional large meal insulin: \(roundToHundredth(finalRecommendation))U"
-    }
+    logMessage += "\nDEBUG: Large meal detected: \(effectiveCarbs)g > maxCOB \(maxCOB)g"
+    logMessage += "\nDEBUG: Additional large meal insulin: \(roundToHundredth(finalRecommendation))U"
     
     return finalRecommendation > 0 ? roundBolus(finalRecommendation) : 0
 }
