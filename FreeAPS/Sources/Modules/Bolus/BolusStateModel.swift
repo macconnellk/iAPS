@@ -2,7 +2,6 @@ import Foundation
 import LoopKit
 import SwiftUI
 import Swinject
-import CoreData
 
 extension Bolus {
     final class StateModel: BaseStateModel<Provider> {
@@ -119,7 +118,7 @@ extension Bolus {
             minimumPrediction = settingsManager.settings.minumimPrediction
             threshold = settingsManager.preferences.threshold_setting
             maxBolus = provider.pumpSettings().maxBolus
-            // YOUR ADDITION: maxCOB setting
+            // YOUR ADDITION: maxCOB setting (from your original working code)
             maxCOB = settings.preferences.maxCOB
             fraction = settings.settings.overrideFactor
             useCalc = settings.settings.useCalc
@@ -183,27 +182,17 @@ extension Bolus {
             return roundedValue
         }
 
-        // YOUR ADDITION: Get effective recent carbs
-        func getEffectiveRecentCarbs() -> Decimal {
-            // Only consider manual carb entries less than 10 minutes old
-            if manualCarbEntry > 0 && Date().timeIntervalSince(mostRecentCarbEntryTime) < 600 {
-                return manualCarbEntry
-            }
-            // If no recent manual entry or it's too old, return 0
-            return 0
-        }
-
-        // YOUR ADDITION: Multiple carb entry detection and handling
+        // YOUR ADDITION: Multiple carb entry detection and handling (from your original code, updated to 30 minutes)
         func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
             // This is a one-time check that doesn't persist state between calls
             
-            // Get current timestamp and 20 minutes ago
+            // Get current timestamp and 30 minutes ago (updated from 20 minutes)
             let now = Date()
-            let twentyMinutesAgo = now.addingTimeInterval(-20 * 60)
+            let thirtyMinutesAgo = now.addingTimeInterval(-30 * 60)
             
             // Use the CoreDataStorage directly to query recent meals
             let fetchRequest: NSFetchRequest<Meals> = Meals.fetchRequest()
-            fetchRequest.predicate = NSPredicate(format: "createdAt >= %@", twentyMinutesAgo as NSDate)
+            fetchRequest.predicate = NSPredicate(format: "createdAt >= %@", thirtyMinutesAgo as NSDate)
             
             var recentEntries: [Meals] = []
             do {
@@ -271,13 +260,33 @@ extension Bolus {
             let finalRecommendation = min(additionalInsulinNeeded, safetyMaxAdditionalInsulin)
             
             // Detailed logging
-            logMessage += "\n\nMultiple entries within 20 min window: \(roundToHundredth(totalRecentCarbs))g"
+            logMessage += "\n\nMultiple entries within 30 min window: \(roundToHundredth(totalRecentCarbs))g"
             logMessage += "\nTotal insulin required for all carbs: \(roundToHundredth(totalInsulinRequired))U"
             logMessage += "\nWith BG correction: \(roundToHundredth(totalRequiredWithCorrection))U"
             logMessage += "\nAlready given/planned: IOB \(roundToHundredth(iob))U + Current \(roundToHundredth(currentCalculatedInsulin))U = \(roundToHundredth(totalAlreadyGiven))U"
             logMessage += "\nAdditional insulin needed: \(roundToHundredth(finalRecommendation))U"
             
             return roundBolus(finalRecommendation)
+        }
+
+        // YOUR ADDITION: Get effective recent carbs
+        func getEffectiveRecentCarbs() -> Decimal {
+            // Only consider manual carb entries less than 10 minutes old
+            if manualCarbEntry > 0 && Date().timeIntervalSince(mostRecentCarbEntryTime) < 600 {
+                return manualCarbEntry
+            }
+            // If no recent manual entry or it's too old, return 0
+            return 0
+        }
+
+        // YOUR ADDITION: Get effective recent carbs
+        func getEffectiveRecentCarbs() -> Decimal {
+            // Only consider manual carb entries less than 10 minutes old
+            if manualCarbEntry > 0 && Date().timeIntervalSince(mostRecentCarbEntryTime) < 600 {
+                return manualCarbEntry
+            }
+            // If no recent manual entry or it's too old, return 0
+            return 0
         }
 
         // YOUR REPLACEMENT: Enhanced calculateInsulin with logging and safety
