@@ -118,7 +118,6 @@ extension Bolus {
             minimumPrediction = settingsManager.settings.minumimPrediction
             threshold = settingsManager.preferences.threshold_setting
             maxBolus = provider.pumpSettings().maxBolus
-            // YOUR ADDITION: maxCOB setting
             maxCOB = settings.preferences.maxCOB
             fraction = settings.settings.overrideFactor
             useCalc = settings.settings.useCalc
@@ -595,6 +594,21 @@ extension Bolus {
             units == .mmolL ? 0.0555 : 1
         }
 
+        // NEW BASE ADDITION: Manual glucose function
+        func addManualGlucose() {
+            let glucose = units == .mmolL ? manualGlucose.asMgdL : manualGlucose
+            let now = Date()
+            let id = UUID().uuidString
+
+            let saveToJSON = BloodGlucose(
+                _id: id,
+                sgv: Int(glucose),
+                date: Decimal(now.timeIntervalSince1970) * 1000,
+                dateString: now,
+                glucose: Int(glucose),
+                type: GlucoseType.manual.rawValue
+            )
+            provider.glucoseStorage.storeGlucose([saveToJSON])
         // NEW BASE ADDITION: Manual glucose function
         func addManualGlucose() {
             let glucose = units == .mmolL ? manualGlucose.asMgdL : manualGlucose
