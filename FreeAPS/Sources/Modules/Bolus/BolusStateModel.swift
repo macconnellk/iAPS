@@ -182,94 +182,17 @@ extension Bolus {
             return roundedValue
         }
 
-        // YOUR ADDITION: Multiple carb entry detection and handling (from your original code, updated to 30 minutes)
-        func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
-            // This is a one-time check that doesn't persist state between calls
-            
-            // Get current timestamp and 30 minutes ago (updated from 20 minutes)
-            let now = Date()
-            let thirtyMinutesAgo = now.addingTimeInterval(-30 * 60)
-            
-            // Use the CoreDataStorage directly to query recent meals
-            let fetchRequest: NSFetchRequest<Meals> = Meals.fetchRequest()
-            fetchRequest.predicate = NSPredicate(format: "createdAt >= %@", thirtyMinutesAgo as NSDate)
-            
-            var recentEntries: [Meals] = []
-            do {
-                recentEntries = try coreDataStorage.viewContext.fetch(fetchRequest)
-            } catch {
-                logMessage += "\nError fetching recent entries: \(error.localizedDescription)"
-                return 0
+        // YOUR ADDITION: Get effective recent carbs
+        func getEffectiveRecentCarbs() -> Decimal {
+            // Only consider manual carb entries less than 10 minutes old
+            if manualCarbEntry > 0 && Date().timeIntervalSince(mostRecentCarbEntryTime) < 600 {
+                return manualCarbEntry
             }
-            
-            // Calculate total carbs in window
-            let totalRecentCarbs = recentEntries.reduce(Decimal(0)) { $0 + Decimal($1.carbs) }
-            
-            // Exit early if conditions not met (not enough entries or not exceeding maxCOB)
-            if recentEntries.count <= 1 || totalRecentCarbs <= maxCOB {
-                return 0
-            }
-            
-            // Calculate what would have been given if all entered at once using large meal logic
-            let standardMaxCOBInsulin = maxCOB / carbRatio
-            let largeMealFractionInsulin = (totalRecentCarbs / carbRatio) * fraction
-            let totalInsulinRequired = max(standardMaxCOBInsulin, largeMealFractionInsulin)
-            
-            // Add BG correction if needed (but don't double-count it)
-            let bgCorrection = currentBG > target ? (currentBG - target) / isf : 0
-            let totalRequiredWithCorrection = totalInsulinRequired + bgCorrection
-            
-            // Calculate what has already been given:
-            // 1. Current IOB from previous boluses
-            // 2. What we're about to give (currentCalculatedInsulin)
-            let totalAlreadyGiven = iob + currentCalculatedInsulin
-            
-            // Only recommend additional if the total requirement exceeds what's already given
-            var additionalInsulinNeeded = max(0, totalRequiredWithCorrection - totalAlreadyGiven)
-            
-            // Apply delta BG safety logic
-            if additionalInsulinNeeded > 0 {
-                if deltaBG <= -45 && currentBG < (threshold + 50) {
-                    // Double arrow down rate (>3 mg/dL/min drop)
-                    additionalInsulinNeeded = additionalInsulinNeeded * 0.7
-                    logMessage += "\nVery rapid BG drop \(deltaBG), reducing additional recommendation to 70%"
-                } else if deltaBG <= -30 && currentBG < (threshold + 30) {
-                    // Single arrow down rate (2-3 mg/dL/min drop)
-                    additionalInsulinNeeded = additionalInsulinNeeded * 0.8
-                    logMessage += "\nRapid BG drop \(deltaBG), reducing additional recommendation to 80%"
-                }
-            }
-            
-            // Apply prediction-based safety (same as main calculation)
-            if minimumPrediction && additionalInsulinNeeded > 0 {
-                if minPredBG < threshold {
-                    // Reduce additional insulin based on threshold prediction
-                    let predictionReduction = roundBolus(abs(threshold + 10 - minPredBG) / isf * 1.25)
-                    additionalInsulinNeeded = max(0, additionalInsulinNeeded - predictionReduction)
-                    logMessage += "\nminPrediction \(minPredBG) < threshold, reducing additional insulin by \(predictionReduction)U"
-                } else if evBG < target {
-                    // Reduce additional insulin based on eventual BG prediction
-                    let predictionReduction = roundBolus(abs(target - evBG) / isf)
-                    additionalInsulinNeeded = max(0, additionalInsulinNeeded - predictionReduction)
-                    logMessage += "\nEventual BG \(evBG) < target, reducing additional insulin by \(predictionReduction)U"
-                }
-            }
-            
-            // Apply maximum cap for additional insulin only
-            let safetyMaxAdditionalInsulin: Decimal = 2.0
-            let finalRecommendation = min(additionalInsulinNeeded, safetyMaxAdditionalInsulin)
-            
-            // Detailed logging
-            logMessage += "\n\nMultiple entries within 30 min window: \(roundToHundredth(totalRecentCarbs))g"
-            logMessage += "\nTotal insulin required for all carbs: \(roundToHundredth(totalInsulinRequired))U"
-            logMessage += "\nWith BG correction: \(roundToHundredth(totalRequiredWithCorrection))U"
-            logMessage += "\nAlready given/planned: IOB \(roundToHundredth(iob))U + Current \(roundToHundredth(currentCalculatedInsulin))U = \(roundToHundredth(totalAlreadyGiven))U"
-            logMessage += "\nAdditional insulin needed: \(roundToHundredth(finalRecommendation))U"
-            
-            return roundBolus(finalRecommendation)
+            // If no recent manual entry or it's too old, return 0
+            return 0
         }
 
-        // YOUR ADDITION: Get effective recent carbs
+        // YOUR REPLACEMENT: Enhanced calculateInsulin with logging and safety
         func getEffectiveRecentCarbs() -> Decimal {
             // Only consider manual carb entries less than 10 minutes old
             if manualCarbEntry > 0 && Date().timeIntervalSince(mostRecentCarbEntryTime) < 600 {
@@ -537,13 +460,6 @@ extension Bolus {
                 if insulinCalculated != originalInsulin {
                     logMessage += "\nFinal insulin after safety: \(insulinCalculated)U"
                     }
-            }
-
-            // YOUR ADDITION: Check for multiple carb entries and add additional insulin if needed
-            let multipleEntryInsulin = checkForMultipleCarbEntries(currentCalculatedInsulin: insulinCalculated)
-            if multipleEntryInsulin > 0 {
-                logMessage += "\n\nADDING MULTIPLE ENTRY CORRECTION: +\(roundToHundredth(multipleEntryInsulin))U"
-                insulinCalculated += multipleEntryInsulin
             }
 
             // Account for increments (Don't use the apsManager function as that gets much too slow)
