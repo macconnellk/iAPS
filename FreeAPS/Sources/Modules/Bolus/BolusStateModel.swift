@@ -118,6 +118,7 @@ extension Bolus {
             minimumPrediction = settingsManager.settings.minumimPrediction
             threshold = settingsManager.preferences.threshold_setting
             maxBolus = provider.pumpSettings().maxBolus
+            // YOUR ADDITION: maxCOB setting
             maxCOB = settings.preferences.maxCOB
             fraction = settings.settings.overrideFactor
             useCalc = settings.settings.useCalc
@@ -191,6 +192,91 @@ extension Bolus {
             return 0
         }
 
+        // YOUR ADDITION: Multiple carb entry detection and handling (30-minute window)
+func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
+    // Get current timestamp and 30 minutes ago
+    let now = Date()
+    let thirtyMinutesAgo = now.addingTimeInterval(-30 * 60)
+    
+    // Use the same pattern as your existing coreDataStorage calls
+    // Query recent meals using CoreDataStorage viewContext
+    let fetchRequest = NSFetchRequest<NSManagedObject>(entityName: "Meals")
+    fetchRequest.predicate = NSPredicate(format: "createdAt >= %@", thirtyMinutesAgo as NSDate)
+    
+    var recentEntries: [NSManagedObject] = []
+    do {
+        recentEntries = try coreDataStorage.viewContext.fetch(fetchRequest)
+    } catch {
+        logMessage += "\nError fetching recent entries: \(error.localizedDescription)"
+        return 0
+    }
+    
+    // Calculate total carbs in window
+    let totalRecentCarbs = recentEntries.reduce(Decimal(0)) { total, entry in
+        if let carbsValue = entry.value(forKey: "carbs") as? Double {
+            return total + Decimal(carbsValue)
+        }
+        return total
+    }
+    
+    // Exit early if conditions not met
+    if recentEntries.count <= 1 || totalRecentCarbs <= maxCOB {
+        return 0
+    }
+    
+    // Calculate what would have been given if all entered at once
+    let standardMaxCOBInsulin = maxCOB / carbRatio
+    let largeMealFractionInsulin = (totalRecentCarbs / carbRatio) * fraction
+    let totalInsulinRequired = max(standardMaxCOBInsulin, largeMealFractionInsulin)
+    
+    // Add BG correction if needed
+    let bgCorrection = currentBG > target ? (currentBG - target) / isf : 0
+    let totalRequiredWithCorrection = totalInsulinRequired + bgCorrection
+    
+    // Calculate what has already been given
+    let totalAlreadyGiven = iob + currentCalculatedInsulin
+    
+    // Only recommend additional if needed
+    var additionalInsulinNeeded = max(0, totalRequiredWithCorrection - totalAlreadyGiven)
+    
+    // Apply delta BG safety logic
+    if additionalInsulinNeeded > 0 {
+        if deltaBG <= -45 && currentBG < (threshold + 50) {
+            additionalInsulinNeeded = additionalInsulinNeeded * 0.7
+            logMessage += "\nVery rapid BG drop \(deltaBG), reducing additional recommendation to 70%"
+        } else if deltaBG <= -30 && currentBG < (threshold + 30) {
+            additionalInsulinNeeded = additionalInsulinNeeded * 0.8
+            logMessage += "\nRapid BG drop \(deltaBG), reducing additional recommendation to 80%"
+        }
+    }
+    
+    // Apply prediction-based safety
+    if minimumPrediction && additionalInsulinNeeded > 0 {
+        if minPredBG < threshold {
+            let predictionReduction = roundBolus(abs(threshold + 10 - minPredBG) / isf * 1.25)
+            additionalInsulinNeeded = max(0, additionalInsulinNeeded - predictionReduction)
+            logMessage += "\nminPrediction \(minPredBG) < threshold, reducing additional insulin by \(predictionReduction)U"
+        } else if evBG < target {
+            let predictionReduction = roundBolus(abs(target - evBG) / isf)
+            additionalInsulinNeeded = max(0, additionalInsulinNeeded - predictionReduction)
+            logMessage += "\nEventual BG \(evBG) < target, reducing additional insulin by \(predictionReduction)U"
+        }
+    }
+    
+    // Apply maximum cap
+    let safetyMaxAdditionalInsulin: Decimal = 2.0
+    let finalRecommendation = min(additionalInsulinNeeded, safetyMaxAdditionalInsulin)
+    
+    // Detailed logging
+    logMessage += "\n\nMultiple entries within 30 min window: \(roundToHundredth(totalRecentCarbs))g"
+    logMessage += "\nTotal insulin required for all carbs: \(roundToHundredth(totalInsulinRequired))U"
+    logMessage += "\nAlready given/planned: IOB \(roundToHundredth(iob))U + Current \(roundToHundredth(currentCalculatedInsulin))U = \(roundToHundredth(totalAlreadyGiven))U"
+    logMessage += "\nAdditional insulin needed: \(roundToHundredth(finalRecommendation))U"
+    
+    return roundBolus(finalRecommendation)
+}
+
+        
         // YOUR REPLACEMENT: Enhanced calculateInsulin with logging and safety
         func calculateInsulin(manualCarbEntry: Decimal? = nil) -> Decimal {
             let conversion: Decimal = units == .mmolL ? 0.0555 : 1
@@ -441,6 +527,13 @@ extension Bolus {
                     }
             }
 
+            // YOUR ADDITION: Check for multiple carb entries and add additional insulin if needed
+            let multipleEntryInsulin = checkForMultipleCarbEntries(currentCalculatedInsulin: insulinCalculated)
+            if multipleEntryInsulin > 0 {
+                logMessage += "\n\nADDING MULTIPLE ENTRY CORRECTION: +\(roundToHundredth(multipleEntryInsulin))U"
+                insulinCalculated += multipleEntryInsulin
+            }
+
             // Account for increments (Don't use the apsManager function as that gets much too slow)
             insulinCalculated = roundBolus(insulinCalculated)
             // 0 up to maxBolus
@@ -594,21 +687,6 @@ extension Bolus {
             units == .mmolL ? 0.0555 : 1
         }
 
-        // NEW BASE ADDITION: Manual glucose function
-        func addManualGlucose() {
-            let glucose = units == .mmolL ? manualGlucose.asMgdL : manualGlucose
-            let now = Date()
-            let id = UUID().uuidString
-
-            let saveToJSON = BloodGlucose(
-                _id: id,
-                sgv: Int(glucose),
-                date: Decimal(now.timeIntervalSince1970) * 1000,
-                dateString: now,
-                glucose: Int(glucose),
-                type: GlucoseType.manual.rawValue
-            )
-            provider.glucoseStorage.storeGlucose([saveToJSON])
         // NEW BASE ADDITION: Manual glucose function
         func addManualGlucose() {
             let glucose = units == .mmolL ? manualGlucose.asMgdL : manualGlucose
