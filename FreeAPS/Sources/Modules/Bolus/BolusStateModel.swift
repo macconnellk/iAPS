@@ -194,6 +194,7 @@ extension Bolus {
 
        func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     let effectiveCarbs = getEffectiveRecentCarbs()
+    logMessage += "\nDEBUG MAIN: effectiveCarbs = \(effectiveCarbs), maxCOB = \(maxCOB)"
     
     // DEBUG: Always log what we're seeing
     logMessage += "\n\nDEBUG: effectiveCarbs = \(effectiveCarbs), maxCOB = \(maxCOB)"
