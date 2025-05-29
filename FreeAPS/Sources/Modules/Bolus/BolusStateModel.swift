@@ -193,42 +193,31 @@ extension Bolus {
         }
 
        func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
-    // Get current timestamp and 30 minutes ago
-    let now = Date()
-    let thirtyMinutesAgo = now.addingTimeInterval(-30 * 60)
+    // For now, let's simulate the multiple entry logic without CoreData queries
+    // We'll use a simple approach based on timing and current vs recent entries
     
-    // Try to fetch recent meals using the same pattern as your existing code
-    let context = coreDataStorage.viewContext
-    let request = NSFetchRequest<Meals>(entityName: "Meals")
-    request.predicate = NSPredicate(format: "createdAt >= %@", thirtyMinutesAgo as NSDate)
-    request.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
+    let effectiveCarbs = getEffectiveRecentCarbs()
+    let currentTime = Date()
     
-    do {
-        let recentEntries = try context.fetch(request)
-        
-        // Calculate total carbs in window  
-        let totalRecentCarbs = recentEntries.reduce(Decimal(0)) { total, meal in
-            return total + Decimal(meal.carbs)
-        }
-        
-        logMessage += "\n\nDEBUG: Found \(recentEntries.count) entries in 30min window"
-        logMessage += "\nDEBUG: Total carbs: \(totalRecentCarbs)g"
-        
-        // Early exit if not enough entries or not exceeding maxCOB
-        guard recentEntries.count > 1 && totalRecentCarbs > maxCOB else {
-            logMessage += "\nDEBUG: No multiple entry correction needed"
-            return 0
-        }
-        
-        // Continue with the large meal logic...
-        logMessage += "\nDEBUG: Multiple entries exceed maxCOB - calculating correction"
-        
-        return 0 // For now, just return 0 to test the CoreData query
-        
-    } catch {
-        logMessage += "\nDEBUG: CoreData fetch error: \(error.localizedDescription)"
+    // Check if we have a recent carb entry within the timing window
+    let timeSinceLastEntry = currentTime.timeIntervalSince(mostRecentCarbEntryTime)
+    
+    logMessage += "\n\nDEBUG: Current entry: \(effectiveCarbs)g"
+    logMessage += "\nDEBUG: Time since last entry: \(Int(timeSinceLastEntry/60)) minutes"
+    
+    // Simple case: if current entry + existing COB > maxCOB within reasonable timeframe
+    let totalCarbs = effectiveCarbs + cob
+    
+    logMessage += "\nDEBUG: Current carbs + COB: \(effectiveCarbs)g + \(cob)g = \(totalCarbs)g"
+    logMessage += "\nDEBUG: maxCOB: \(maxCOB)g"
+    
+    guard totalCarbs > maxCOB && timeSinceLastEntry < 1800 else { // 30 minutes = 1800 seconds
+        logMessage += "\nDEBUG: No multiple entry correction needed"
         return 0
     }
+    
+    logMessage += "\nDEBUG: Multiple entry logic would apply here"
+    return 0 // Return 0 for now, just testing the logic
 }
 
         
