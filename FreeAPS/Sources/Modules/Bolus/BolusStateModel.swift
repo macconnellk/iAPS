@@ -193,32 +193,42 @@ extension Bolus {
         }
 
        func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
-    let effectiveCarbs = getEffectiveRecentCarbs()
-    logMessage += "\nDEBUG MAIN: effectiveCarbs = \(effectiveCarbs), maxCOB = \(maxCOB)"
+    // Get current timestamp and 30 minutes ago
+    let now = Date()
+    let thirtyMinutesAgo = now.addingTimeInterval(-30 * 60)
     
-    // DEBUG: Always log what we're seeing
-    logMessage += "\n\nDEBUG: effectiveCarbs = \(effectiveCarbs), maxCOB = \(maxCOB)"
-    logMessage += "\nDEBUG: manualCarbEntry = \(manualCarbEntry)"
-    logMessage += "\nDEBUG: mostRecentCarbEntryTime = \(mostRecentCarbEntryTime)"
+    // Try to fetch recent meals using the same pattern as your existing code
+    let context = coreDataStorage.viewContext
+    let request = NSFetchRequest<Meals>(entityName: "Meals")
+    request.predicate = NSPredicate(format: "createdAt >= %@", thirtyMinutesAgo as NSDate)
+    request.sortDescriptors = [NSSortDescriptor(key: "createdAt", ascending: false)]
     
-    guard effectiveCarbs > maxCOB else { 
-        logMessage += "\nDEBUG: Guard failed - effectiveCarbs not > maxCOB"
-        return 0 
+    do {
+        let recentEntries = try context.fetch(request)
+        
+        // Calculate total carbs in window  
+        let totalRecentCarbs = recentEntries.reduce(Decimal(0)) { total, meal in
+            return total + Decimal(meal.carbs)
+        }
+        
+        logMessage += "\n\nDEBUG: Found \(recentEntries.count) entries in 30min window"
+        logMessage += "\nDEBUG: Total carbs: \(totalRecentCarbs)g"
+        
+        // Early exit if not enough entries or not exceeding maxCOB
+        guard recentEntries.count > 1 && totalRecentCarbs > maxCOB else {
+            logMessage += "\nDEBUG: No multiple entry correction needed"
+            return 0
+        }
+        
+        // Continue with the large meal logic...
+        logMessage += "\nDEBUG: Multiple entries exceed maxCOB - calculating correction"
+        
+        return 0 // For now, just return 0 to test the CoreData query
+        
+    } catch {
+        logMessage += "\nDEBUG: CoreData fetch error: \(error.localizedDescription)"
+        return 0
     }
-    
-    // Calculate additional insulin for large meal treatment
-    let standardInsulin = effectiveCarbs / carbRatio
-    let largeMealInsulin = (effectiveCarbs / carbRatio) * fraction
-    let additionalFromLargeMeal = largeMealInsulin - standardInsulin
-    
-    // Apply safety cap
-    let safetyMaxAdditionalInsulin: Decimal = 2.0
-    let finalRecommendation = min(additionalFromLargeMeal, safetyMaxAdditionalInsulin)
-    
-    logMessage += "\nDEBUG: Large meal detected: \(effectiveCarbs)g > maxCOB \(maxCOB)g"
-    logMessage += "\nDEBUG: Additional large meal insulin: \(roundToHundredth(finalRecommendation))U"
-    
-    return finalRecommendation > 0 ? roundBolus(finalRecommendation) : 0
 }
 
         
