@@ -193,31 +193,41 @@ extension Bolus {
         }
 
        func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
-    // For now, let's simulate the multiple entry logic without CoreData queries
-    // We'll use a simple approach based on timing and current vs recent entries
-    
     let effectiveCarbs = getEffectiveRecentCarbs()
     let currentTime = Date()
-    
-    // Check if we have a recent carb entry within the timing window
     let timeSinceLastEntry = currentTime.timeIntervalSince(mostRecentCarbEntryTime)
     
-    logMessage += "\n\nDEBUG: Current entry: \(effectiveCarbs)g"
-    logMessage += "\nDEBUG: Time since last entry: \(Int(timeSinceLastEntry/60)) minutes"
-    
-    // Simple case: if current entry + existing COB > maxCOB within reasonable timeframe
+    // Simple case: if current entry + existing COB > maxCOB within timeframe
     let totalCarbs = effectiveCarbs + cob
     
+    logMessage += "\n\nDEBUG: Current entry: \(effectiveCarbs)g"
     logMessage += "\nDEBUG: Current carbs + COB: \(effectiveCarbs)g + \(cob)g = \(totalCarbs)g"
-    logMessage += "\nDEBUG: maxCOB: \(maxCOB)g"
     
-    guard totalCarbs > maxCOB && timeSinceLastEntry < 1800 else { // 30 minutes = 1800 seconds
+    guard totalCarbs > maxCOB && timeSinceLastEntry < 1800 else {
         logMessage += "\nDEBUG: No multiple entry correction needed"
         return 0
     }
     
-    logMessage += "\nDEBUG: Multiple entry logic would apply here"
-    return 0 // Return 0 for now, just testing the logic
+    // Calculate what the total carbs should get as one large meal
+    let maxCOBInsulin = maxCOB / carbRatio
+    let totalFractionInsulin = (totalCarbs / carbRatio) * fraction
+    let largeMealTotalInsulin = max(maxCOBInsulin, totalFractionInsulin)
+    
+    // Calculate what's already been covered
+    let totalAlreadyGiven = iob + currentCalculatedInsulin
+    
+    // Calculate additional insulin needed
+    var additionalInsulinNeeded = max(0, largeMealTotalInsulin - totalAlreadyGiven)
+    
+    // Apply safety cap
+    let safetyMaxAdditionalInsulin: Decimal = 2.0
+    let finalRecommendation = min(additionalInsulinNeeded, safetyMaxAdditionalInsulin)
+    
+    logMessage += "\nDEBUG: Total \(totalCarbs)g should get: \(roundToHundredth(largeMealTotalInsulin))U"
+    logMessage += "\nDEBUG: Already given/planned: \(roundToHundredth(totalAlreadyGiven))U"
+    logMessage += "\nDEBUG: Additional needed: \(roundToHundredth(finalRecommendation))U"
+    
+    return finalRecommendation > 0 ? roundBolus(finalRecommendation) : 0
 }
 
         
