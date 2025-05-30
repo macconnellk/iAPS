@@ -46,17 +46,17 @@ final class CoreDataStorage {
         return uniqueEvents
     }
 
-    func fetchRecentMeals() -> [Meals] {
-        var meals = [Meals]()
-        coredataContext.performAndWait {
-            let requestMeals = Meals.fetchRequest() as NSFetchRequest<Meals>
-            let sort = NSSortDescriptor(key: "createdAt", ascending: false)
-            requestMeals.sortDescriptors = [sort]
-            requestMeals.fetchLimit = 5  // Just get last 5 meals for testing
-            try? meals = coredataContext.fetch(requestMeals)
-        }
-        return meals
-    }
+//    func fetchRecentMeals() -> [Meals] {
+//        var meals = [Meals]()
+//        coredataContext.performAndWait {
+ //           let requestMeals = Meals.fetchRequest() as NSFetchRequest<Meals>
+//            let sort = NSSortDescriptor(key: "createdAt", ascending: false)
+//            requestMeals.sortDescriptors = [sort]
+//            requestMeals.fetchLimit = 5  // Just get last 5 meals for testing
+//            try? meals = coredataContext.fetch(requestMeals)
+//        }
+ //       return meals
+//    }
     
     func saveTDD(_ insulin: (bolus: Decimal, basal: Decimal, hours: Double)) {
         coredataContext.perform {
