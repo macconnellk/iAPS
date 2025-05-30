@@ -192,7 +192,8 @@ extension Bolus {
             return 0
         }
 
-       func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
+      // FIXED: Proper multiple carb entry detection using real meal aggregation
+    func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
         let effectiveCarbs = getEffectiveRecentCarbs()
         let currentTime = Date()
         let timeSinceLastEntry = currentTime.timeIntervalSince(mostRecentCarbEntryTime)
@@ -226,18 +227,22 @@ extension Bolus {
         let totalFractionInsulin = (totalMealCarbs / carbRatio) * fraction
         let largeMealTotalInsulin = max(maxCOBInsulin, totalFractionInsulin)
         
-        // Calculate what's already been covered
-        let totalAlreadyGiven = iob + currentCalculatedInsulin
+        // Calculate what's already been covered (just the current calculation)
+        let currentlyPlanned = currentCalculatedInsulin
+        
+        // Apply IOB as a reduction (same approach as main calculation)
+        let iobReduction = iob > 0 ? iob : 0
         
         // Calculate additional insulin needed
-        var additionalInsulinNeeded = max(0, largeMealTotalInsulin - totalAlreadyGiven)
+        var additionalInsulinNeeded = max(0, largeMealTotalInsulin - currentlyPlanned - iobReduction)
         
         // Apply safety cap
         let safetyMaxAdditionalInsulin: Decimal = 2.0
         let finalRecommendation = min(additionalInsulinNeeded, safetyMaxAdditionalInsulin)
         
         logMessage += "\nDEBUG: Total \(totalMealCarbs)g should get: \(roundToHundredth(largeMealTotalInsulin))U"
-        logMessage += "\nDEBUG: Already given/planned: \(roundToHundredth(totalAlreadyGiven))U" 
+        logMessage += "\nDEBUG: Currently planned: \(roundToHundredth(currentlyPlanned))U"
+        logMessage += "\nDEBUG: IOB reduction: \(roundToHundredth(iobReduction))U" 
         logMessage += "\nDEBUG: Additional needed: \(roundToHundredth(finalRecommendation))U"
         
         return finalRecommendation > 0 ? roundBolus(finalRecommendation) : 0
