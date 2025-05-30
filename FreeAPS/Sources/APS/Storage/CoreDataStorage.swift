@@ -46,6 +46,22 @@ final class CoreDataStorage {
         return uniqueEvents
     }
 
+    func fetchRecentMeals(within timeInterval: TimeInterval = 1800) -> [Meals] {
+        var meals = [Meals]()
+        let cutoffTime = Date().addingTimeInterval(-timeInterval)
+        
+        coredataContext.performAndWait {
+            let requestMeals = Meals.fetchRequest() as NSFetchRequest<Meals>
+            let sort = NSSortDescriptor(key: "createdAt", ascending: false)
+            requestMeals.sortDescriptors = [sort]
+            requestMeals.predicate = NSPredicate(
+                format: "createdAt > %@ AND carbs > 0", cutoffTime as NSDate
+            )
+            try? meals = coredataContext.fetch(requestMeals)
+        }
+        return meals
+    }
+    
     func saveTDD(_ insulin: (bolus: Decimal, basal: Decimal, hours: Double)) {
         coredataContext.perform {
             let saveToTDD = TDD(context: self.coredataContext)
