@@ -182,37 +182,53 @@ extension Bolus {
             return roundedValue
         }
 
-
-        func getRecentMeals(within timeInterval: TimeInterval = 1800) -> [Meals] {
-        var meals = [Meals]()
-        let cutoffTime = Date().addingTimeInterval(-timeInterval)
-        
-        coreDataStorage.coredataContext.performAndWait {
-            let requestMeals = Meals.fetchRequest() as NSFetchRequest<Meals>
-            let sort = NSSortDescriptor(key: "createdAt", ascending: false)
-            requestMeals.sortDescriptors = [sort]
-            requestMeals.predicate = NSPredicate(
-                format: "createdAt > %@ AND carbs > 0", cutoffTime as NSDate
-            )
-            try? meals = coreDataStorage.coredataContext.fetch(requestMeals)
-        }
-        return meals
-        }    
-        
         // YOUR ADDITION: Get effective recent carbs
-//        func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
-        // Test basic CoreData access first
-//        let recentMeals = coreDataStorage.fetchRecentMeals()
-        
- //       logMessage += "\n\nDEBUG: Found \(recentMeals.count) meals in database"
-        
- //       if let firstMeal = recentMeals.first {
-//           logMessage += "\nDEBUG: Most recent meal: \(firstMeal.carbs)g"
-//        }
-        
-        // For now, just return 0 to test if the basic access works
- //       return 0
- //   }
+        func getEffectiveRecentCarbs() -> Decimal {
+            // Only consider manual carb entries less than 10 minutes old
+            if manualCarbEntry > 0 && Date().timeIntervalSince(mostRecentCarbEntryTime) < 600 {
+                return manualCarbEntry
+            }
+            // If no recent manual entry or it's too old, return 0
+            return 0
+        }
+
+       func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
+    let effectiveCarbs = getEffectiveRecentCarbs()
+    let currentTime = Date()
+    let timeSinceLastEntry = currentTime.timeIntervalSince(mostRecentCarbEntryTime)
+    
+    // Simple case: if current entry + existing COB > maxCOB within timeframe
+    let totalCarbs = effectiveCarbs + cob
+    
+    logMessage += "\n\nDEBUG: Current entry: \(effectiveCarbs)g"
+    logMessage += "\nDEBUG: Current carbs + COB: \(effectiveCarbs)g + \(cob)g = \(totalCarbs)g"
+    
+    guard totalCarbs > maxCOB && timeSinceLastEntry < 1800 else {
+        logMessage += "\nDEBUG: No multiple entry correction needed"
+        return 0
+    }
+    
+    // Calculate what the total carbs should get as one large meal
+    let maxCOBInsulin = maxCOB / carbRatio
+    let totalFractionInsulin = (totalCarbs / carbRatio) * fraction
+    let largeMealTotalInsulin = max(maxCOBInsulin, totalFractionInsulin)
+    
+    // Calculate what's already been covered
+    let totalAlreadyGiven = iob + currentCalculatedInsulin
+    
+    // Calculate additional insulin needed
+    var additionalInsulinNeeded = max(0, largeMealTotalInsulin - totalAlreadyGiven)
+    
+    // Apply safety cap
+    let safetyMaxAdditionalInsulin: Decimal = 2.0
+    let finalRecommendation = min(additionalInsulinNeeded, safetyMaxAdditionalInsulin)
+    
+    logMessage += "\nDEBUG: Total \(totalCarbs)g should get: \(roundToHundredth(largeMealTotalInsulin))U"
+    logMessage += "\nDEBUG: Already given/planned: \(roundToHundredth(totalAlreadyGiven))U"
+    logMessage += "\nDEBUG: Additional needed: \(roundToHundredth(finalRecommendation))U"
+    
+    return finalRecommendation > 0 ? roundBolus(finalRecommendation) : 0
+}
 
         
         // YOUR REPLACEMENT: Enhanced calculateInsulin with logging and safety
