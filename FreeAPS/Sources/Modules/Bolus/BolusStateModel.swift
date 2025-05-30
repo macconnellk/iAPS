@@ -200,19 +200,19 @@ extension Bolus {
         }    
         
         // YOUR ADDITION: Get effective recent carbs
-        func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
+//        func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
         // Test basic CoreData access first
-        let recentMeals = coreDataStorage.fetchRecentMeals()
+//        let recentMeals = coreDataStorage.fetchRecentMeals()
         
-        logMessage += "\n\nDEBUG: Found \(recentMeals.count) meals in database"
+ //       logMessage += "\n\nDEBUG: Found \(recentMeals.count) meals in database"
         
-        if let firstMeal = recentMeals.first {
-            logMessage += "\nDEBUG: Most recent meal: \(firstMeal.carbs)g"
-        }
+ //       if let firstMeal = recentMeals.first {
+//           logMessage += "\nDEBUG: Most recent meal: \(firstMeal.carbs)g"
+//        }
         
         // For now, just return 0 to test if the basic access works
-        return 0
-    }
+ //       return 0
+ //   }
 
         
         // YOUR REPLACEMENT: Enhanced calculateInsulin with logging and safety
