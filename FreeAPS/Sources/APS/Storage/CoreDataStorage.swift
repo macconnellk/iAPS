@@ -46,17 +46,13 @@ final class CoreDataStorage {
         return uniqueEvents
     }
 
-    func fetchRecentMeals(within timeInterval: TimeInterval = 1800) -> [Meals] {
+    func fetchRecentMeals() -> [Meals] {
         var meals = [Meals]()
-        let cutoffTime = Date().addingTimeInterval(-timeInterval)
-        
         coredataContext.performAndWait {
             let requestMeals = Meals.fetchRequest() as NSFetchRequest<Meals>
             let sort = NSSortDescriptor(key: "createdAt", ascending: false)
             requestMeals.sortDescriptors = [sort]
-            requestMeals.predicate = NSPredicate(
-                format: "createdAt > %@ AND carbs > 0", cutoffTime as NSDate
-            )
+            requestMeals.fetchLimit = 5  // Just get last 5 meals for testing
             try? meals = coredataContext.fetch(requestMeals)
         }
         return meals
