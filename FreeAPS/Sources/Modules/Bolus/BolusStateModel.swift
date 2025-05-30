@@ -200,13 +200,14 @@ extension Bolus {
         }    
         
         // YOUR ADDITION: Get effective recent carbs
-        func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
+        // FIXED: Proper multiple carb entry detection using real meal aggregation
+    func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
         let effectiveCarbs = getEffectiveRecentCarbs()
         let currentTime = Date()
         let timeSinceLastEntry = currentTime.timeIntervalSince(mostRecentCarbEntryTime)
         
-        // Get all meals within 30 minutes
-        let recentMeals = getRecentMeals(within: 1800)
+        // Get all meals within 30 minutes using CoreDataStorage
+        let recentMeals = coreDataStorage.fetchRecentMeals(within: 1800)
         
         guard !recentMeals.isEmpty && timeSinceLastEntry < 1800 else {
             logMessage += "\n\nDEBUG: No recent meals found for multiple entry correction"
