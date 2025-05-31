@@ -193,15 +193,14 @@ extension Bolus {
         }
 
       // FIXED: Proper multiple carb entry detection using real meal aggregation
+    // FIXED: Proper multiple carb entry detection using real meal aggregation
     func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
-        let effectiveCarbs = getEffectiveRecentCarbs()
         let currentTime = Date()
-        let timeSinceLastEntry = currentTime.timeIntervalSince(mostRecentCarbEntryTime)
         
         // Get all meals within 30 minutes using CoreDataStorage
         let recentMeals = coreDataStorage.fetchRecentMeals(within: 1800)
         
-        guard !recentMeals.isEmpty && timeSinceLastEntry < 1800 else {
+        guard !recentMeals.isEmpty else {
             logMessage += "\n\nDEBUG: No recent meals found for multiple entry correction"
             return 0
         }
@@ -222,28 +221,29 @@ extension Bolus {
             return 0
         }
         
-        // Calculate what the total carbs should get as one large meal
+        // Calculate what the total large meal should get (including BG correction)
         let maxCOBInsulin = maxCOB / carbRatio
         let totalFractionInsulin = (totalMealCarbs / carbRatio) * fraction
-        let largeMealTotalInsulin = max(maxCOBInsulin, totalFractionInsulin)
+        let largeMealInsulin = max(maxCOBInsulin, totalFractionInsulin)
         
-        // Calculate what's already been covered (just the current calculation)
-        let currentlyPlanned = currentCalculatedInsulin
+        // Add BG correction to large meal calculation
+        let totalLargeMealInsulin = largeMealInsulin + targetDifferenceInsulin
         
         // Apply IOB as a reduction (same approach as main calculation)
         let iobReduction = iob > 0 ? iob : 0
         
-        // Calculate additional insulin needed
-        var additionalInsulinNeeded = max(0, largeMealTotalInsulin - currentlyPlanned - iobReduction)
+        // Calculate TOTAL insulin needed for large meal (not additional)
+        let largeMealFinalInsulin = max(0, totalLargeMealInsulin - iobReduction)
         
-        // Apply safety cap
-        let safetyMaxAdditionalInsulin: Decimal = 2.0
-        let finalRecommendation = min(additionalInsulinNeeded, safetyMaxAdditionalInsulin)
+        // Apply safety cap to final amount
+        let safetyMaxInsulin: Decimal = 8.0  // Higher cap since this is total, not additional
+        let finalRecommendation = min(largeMealFinalInsulin, safetyMaxInsulin)
         
-        logMessage += "\nDEBUG: Total \(totalMealCarbs)g should get: \(roundToHundredth(largeMealTotalInsulin))U"
-        logMessage += "\nDEBUG: Currently planned: \(roundToHundredth(currentlyPlanned))U"
+        logMessage += "\nDEBUG: Large meal (\(totalMealCarbs)g) insulin: \(roundToHundredth(largeMealInsulin))U"
+        logMessage += "\nDEBUG: BG correction: \(roundToHundredth(targetDifferenceInsulin))U"
+        logMessage += "\nDEBUG: Total before IOB: \(roundToHundredth(totalLargeMealInsulin))U"
         logMessage += "\nDEBUG: IOB reduction: \(roundToHundredth(iobReduction))U" 
-        logMessage += "\nDEBUG: Additional needed: \(roundToHundredth(finalRecommendation))U"
+        logMessage += "\nDEBUG: LARGE MEAL TOTAL: \(roundToHundredth(finalRecommendation))U"
         
         return finalRecommendation > 0 ? roundBolus(finalRecommendation) : 0
     }
@@ -499,11 +499,13 @@ extension Bolus {
                     }
             }
 
-            // YOUR ADDITION: Check for multiple carb entries and add additional insulin if needed
-            let multipleEntryInsulin = checkForMultipleCarbEntries(currentCalculatedInsulin: insulinCalculated)
-            if multipleEntryInsulin > 0 {
-                logMessage += "\n\nADDING MULTIPLE ENTRY CORRECTION: +\(roundToHundredth(multipleEntryInsulin))U"
-                insulinCalculated += multipleEntryInsulin
+            // YOUR ADDITION: Check for multiple carb entries and override with large meal calculation if needed
+            let largeMealInsulin = checkForMultipleCarbEntries(currentCalculatedInsulin: insulinCalculated)
+            if largeMealInsulin > 0 {
+                logMessage += "\n\nLARGE MEAL DETECTED - OVERRIDING CALCULATION"
+                logMessage += "\nOriginal calculation: \(roundToHundredth(insulinCalculated))U"
+                logMessage += "\nLarge meal total: \(roundToHundredth(largeMealInsulin))U"
+                insulinCalculated = largeMealInsulin
             }
 
             // Account for increments (Don't use the apsManager function as that gets much too slow)
