@@ -192,61 +192,124 @@ extension Bolus {
             return 0
         }
 
-      // FIXED: Proper multiple carb entry detection using real meal aggregation
-    // FIXED: Proper multiple carb entry detection using real meal aggregation
-    func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
-        let currentTime = Date()
-        
-        // Get all meals within 30 minutes using CoreDataStorage
-        let recentMeals = coreDataStorage.fetchRecentMeals(within: 1800)
-        
-        guard !recentMeals.isEmpty else {
-            logMessage += "\n\nDEBUG: No recent meals found for multiple entry correction"
+        // EXTRACTED: Safety reduction logic that both main calculation and large meal can use
+        func applySafetyReductions(rawInsulin: Decimal, isLargeMeal: Bool = false) -> Decimal {
+            var deltaBasedInsulin = rawInsulin
+            var predictionBasedInsulin = rawInsulin
+            let originalInsulin = rawInsulin
+    
+            // Calculate BG delta-based reduction
+            if deltaBasedInsulin > 0 {
+                if deltaBG <= -45 && currentBG < (threshold + 50) {
+                    // Double arrow down rate (>3 mg/dL/min drop)
+                    deltaBasedInsulin = deltaBasedInsulin * 0.7
+                    deltaReductionApplied = true
+                    logMessage += "\nVery rapid BG drop \(deltaBG), delta-based calculation suggests 70% of original bolus"
+                } else if deltaBG <= -30 && currentBG < (threshold + 30) {
+            // Single arrow down rate (2-3 mg/dL/min drop)
+            deltaBasedInsulin = deltaBasedInsulin * 0.8
+            deltaReductionApplied = true
+            logMessage += "\nRapid BG drop \(deltaBG), delta-based calculation suggests 80% of original bolus"
+               }
+            }
+    
+            // Calculate prediction-based reduction
+            if minimumPrediction && predictionBasedInsulin > 0 {
+                if minPredBG < threshold {
+                    // Reduce insulin based on threshold prediction
+                    belowThresholdInsulinReduction = roundBolus(abs(threshold + 10 - minPredBG) / isf)
+                    // Apply a safety factor to reduce further
+                    belowThresholdInsulinReduction = roundBolus(belowThresholdInsulinReduction * 1.25)
+                    predictionBasedInsulin = predictionBasedInsulin - abs(belowThresholdInsulinReduction)
+                    predictionReductionApplied = true
+                    logMessage += "\nminPrediction \(minPredBG) < threshold, prediction-based calculation suggests reducing bolus by \(belowThresholdInsulinReduction)"
+                } else if evBG < target {
+                    // Reduce insulin based on eventual BG prediction
+                    belowTargetInsulinReduction = roundBolus(abs(target - evBG) / isf)
+                    predictionBasedInsulin = predictionBasedInsulin - abs(belowTargetInsulinReduction)
+                    predictionReductionApplied = true
+                    logMessage += "\nEventual BG \(evBG) < target, prediction-based calculation suggests reducing bolus by \(belowTargetInsulinReduction)"
+                }
+            }
+    
+            // Choose the minimum insulin amount
+            let finalInsulin = min(deltaBasedInsulin, predictionBasedInsulin)
+    
+            // Add comparison log if both reductions applied
+            if deltaReductionApplied && predictionReductionApplied {
+                logMessage += "\nFinal insulin calculation chose minimum between delta-based (\(roundToHundredth(deltaBasedInsulin))) and prediction-based (\(roundToHundredth(predictionBasedInsulin))) calculations"
+            }
+    
+            // Only add final insulin amount if any safety reductions were applied
+            if deltaReductionApplied || predictionReductionApplied {
+                if finalInsulin != originalInsulin {
+                    let mealType = isLargeMeal ? "large meal" : "standard"
+                    logMessage += "\nFinal \(mealType) insulin after safety: \(roundToHundredth(finalInsulin))U"
+                }
+            }
+    
+            return finalInsulin
+        }
+      
+        // Proper multiple carb entry detection using real meal aggregation
+        func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
+            let currentTime = Date()
+    
+            // Get all meals within 30 minutes using CoreDataStorage
+            let recentMeals = coreDataStorage.fetchRecentMeals(within: 1800)
+    
+            guard !recentMeals.isEmpty else {
+                logMessage += "\n\nNo recent meals found for multiple entry correction"
             return 0
+            }
+    
+            // Calculate REAL total carbs from all meal entries
+            let totalMealCarbs = recentMeals.reduce(0) { $0 + Decimal($1.carbs) }
+    
+            logMessage += "\n\nFound \(recentMeals.count) recent meal entries:"
+            for (index, meal) in recentMeals.enumerated() {
+                let timeAgo = Int(currentTime.timeIntervalSince(meal.createdAt ?? Date()) / 60)
+                logMessage += "\nEntry \(index + 1): \(Decimal(meal.carbs))g (\(timeAgo)min ago)"
+            }
+            logMessage += "\nREAL total carbs: \(totalMealCarbs)g"
+    
+            // Only apply correction if total exceeds maxCOB
+            guard totalMealCarbs > maxCOB else {
+                logMessage += "\nTotal \(totalMealCarbs)g ≤ maxCOB \(maxCOB)g - No correction needed"
+                return 0
+            }
+    
+            // Calculate RAW large meal insulin (before safety)
+            let maxCOBInsulin = maxCOB / carbRatio
+            let totalFractionInsulin = (totalMealCarbs / carbRatio) * fraction
+            let largeMealInsulin = max(maxCOBInsulin, totalFractionInsulin)
+    
+            // Add BG correction to large meal calculation
+            let totalLargeMealInsulin = largeMealInsulin + targetDifferenceInsulin
+    
+            // Apply IOB as a reduction (same approach as main calculation)
+            let iobReduction = iob > 0 ? iob : 0
+    
+            // Calculate TOTAL insulin needed for large meal (not additional)
+            let largeMealBeforeSafety = max(0, totalLargeMealInsulin - iobReduction)
+    
+            // Apply safety cap to raw amount
+            let safetyMaxInsulin: Decimal = min(6.0, maxBolus * 0.8)  // Child-appropriate cap
+            let cappedLargeMealInsulin = min(largeMealBeforeSafety, safetyMaxInsulin)
+    
+            logMessage += "\nLarge meal (\(totalMealCarbs)g) insulin: \(roundToHundredth(largeMealInsulin))U"
+            logMessage += "\nBG correction: \(roundToHundredth(targetDifferenceInsulin))U"
+            logMessage += "\nTotal before IOB: \(roundToHundredth(totalLargeMealInsulin))U"
+            logMessage += "\nIOB reduction: \(roundToHundredth(iobReduction))U" 
+            logMessage += "\nLARGE MEAL BEFORE SAFETY: \(roundToHundredth(cappedLargeMealInsulin))U"
+    
+            // NOW APPLY THE SAME SAFETY REDUCTIONS AS MAIN CALCULATION
+            let safeLargeMealInsulin = applySafetyReductions(rawInsulin: cappedLargeMealInsulin, isLargeMeal: true)
+    
+            logMessage += "\nLARGE MEAL AFTER SAFETY: \(roundToHundredth(safeLargeMealInsulin))U"
+    
+            return safeLargeMealInsulin > 0 ? roundBolus(safeLargeMealInsulin) : 0
         }
-        
-        // Calculate REAL total carbs from all meal entries
-        let totalMealCarbs = recentMeals.reduce(0) { $0 + Decimal($1.carbs) }
-        
-        logMessage += "\n\nDEBUG: Found \(recentMeals.count) recent meal entries:"
-        for (index, meal) in recentMeals.enumerated() {
-            let timeAgo = Int(currentTime.timeIntervalSince(meal.createdAt ?? Date()) / 60)
-            logMessage += "\nDEBUG: Entry \(index + 1): \(Decimal(meal.carbs))g (\(timeAgo)min ago)"
-        }
-        logMessage += "\nDEBUG: REAL total carbs: \(totalMealCarbs)g"
-        
-        // Only apply correction if total exceeds maxCOB
-        guard totalMealCarbs > maxCOB else {
-            logMessage += "\nDEBUG: Total \(totalMealCarbs)g ≤ maxCOB \(maxCOB)g - No correction needed"
-            return 0
-        }
-        
-        // Calculate what the total large meal should get (including BG correction)
-        let maxCOBInsulin = maxCOB / carbRatio
-        let totalFractionInsulin = (totalMealCarbs / carbRatio) * fraction
-        let largeMealInsulin = max(maxCOBInsulin, totalFractionInsulin)
-        
-        // Add BG correction to large meal calculation
-        let totalLargeMealInsulin = largeMealInsulin + targetDifferenceInsulin
-        
-        // Apply IOB as a reduction (same approach as main calculation)
-        let iobReduction = iob > 0 ? iob : 0
-        
-        // Calculate TOTAL insulin needed for large meal (not additional)
-        let largeMealFinalInsulin = max(0, totalLargeMealInsulin - iobReduction)
-        
-        // Apply safety cap to final amount
-        let safetyMaxInsulin: Decimal = 8.0  // Higher cap since this is total, not additional
-        let finalRecommendation = min(largeMealFinalInsulin, safetyMaxInsulin)
-        
-        logMessage += "\nDEBUG: Large meal (\(totalMealCarbs)g) insulin: \(roundToHundredth(largeMealInsulin))U"
-        logMessage += "\nDEBUG: BG correction: \(roundToHundredth(targetDifferenceInsulin))U"
-        logMessage += "\nDEBUG: Total before IOB: \(roundToHundredth(totalLargeMealInsulin))U"
-        logMessage += "\nDEBUG: IOB reduction: \(roundToHundredth(iobReduction))U" 
-        logMessage += "\nDEBUG: LARGE MEAL TOTAL: \(roundToHundredth(finalRecommendation))U"
-        
-        return finalRecommendation > 0 ? roundBolus(finalRecommendation) : 0
-    }
 
         
         // YOUR REPLACEMENT: Enhanced calculateInsulin with logging and safety
@@ -445,61 +508,10 @@ extension Bolus {
                 insulinCalculated = result
             }
 
-            // YOUR ADDITION: Reduce insulin if BG is dropping rapidly or lows are predicted
-            deltaBasedInsulin = insulinCalculated
-            predictionBasedInsulin = insulinCalculated
-            let originalInsulin = insulinCalculated
+            // Apply safety reductions using extracted function
+            insulinCalculated = applySafetyReductions(rawInsulin: insulinCalculated, isLargeMeal: false)
 
-            // Calculate BG delta-based reduction
-            if deltaBasedInsulin > 0 {
-                if deltaBG <= -45 && currentBG < (threshold + 50) {
-                    // Double arrow down rate (>3 mg/dL/min drop)
-                    deltaBasedInsulin = deltaBasedInsulin * 0.7
-                    deltaReductionApplied = true
-                    logMessage += "\nVery rapid BG drop \(deltaBG), delta-based calculation suggests 70% of original bolus"
-                } else if deltaBG <= -30 && currentBG < (threshold + 30) {
-                    // Single arrow down rate (2-3 mg/dL/min drop)
-                    deltaBasedInsulin = deltaBasedInsulin * 0.8
-                    deltaReductionApplied = true
-                    logMessage += "\nRapid BG drop \(deltaBG), delta-based calculation suggests 80% of original bolus"
-                }
-            }
-
-            // Calculate prediction-based reduction
-            if minimumPrediction && predictionBasedInsulin > 0 {
-                if minPredBG < threshold {
-                    // Reduce insulin based on threshold prediction
-                    belowThresholdInsulinReduction = roundBolus(abs(threshold + 10 - minPredBG) / isf)
-                    // Apply a safety factor to reduce further
-                    belowThresholdInsulinReduction = roundBolus(belowThresholdInsulinReduction * 1.25)
-                    predictionBasedInsulin = predictionBasedInsulin - abs(belowThresholdInsulinReduction)
-                    predictionReductionApplied = true
-                    logMessage += "\nminPrediction \(minPredBG) < threshold, prediction-based calculation suggests reducing bolus by \(belowThresholdInsulinReduction)"
-                } else if evBG < target {
-                    // Reduce insulin based on eventual BG prediction
-                    belowTargetInsulinReduction = roundBolus(abs(target - evBG) / isf)
-                    predictionBasedInsulin = predictionBasedInsulin - abs(belowTargetInsulinReduction)
-                    predictionReductionApplied = true
-                    logMessage += "\nEventual BG \(evBG) < target, prediction-based calculation suggests reducing bolus by \(belowTargetInsulinReduction)"
-                }
-            }
-
-            // Choose the minimum insulin amount
-            insulinCalculated = min(deltaBasedInsulin, predictionBasedInsulin)
-
-            // Add comparison log if both reductions applied
-            if deltaReductionApplied && predictionReductionApplied {
-                logMessage += "\nFinal insulin calculation chose minimum between delta-based (\(deltaBasedInsulin)) and prediction-based (\(predictionBasedInsulin)) calculations"
-            }
-
-            // Only add final insulin amount if any safety reductions were applied
-            if deltaReductionApplied || predictionReductionApplied {
-                if insulinCalculated != originalInsulin {
-                    logMessage += "\nFinal insulin after safety: \(insulinCalculated)U"
-                    }
-            }
-
-            // YOUR ADDITION: Check for multiple carb entries and override with large meal calculation if needed
+            // Check for multiple carb entries and override with large meal calculation if needed
             let largeMealInsulin = checkForMultipleCarbEntries(currentCalculatedInsulin: insulinCalculated)
             if largeMealInsulin > 0 {
                 logMessage += "\n\nLARGE MEAL DETECTED - OVERRIDING CALCULATION"
