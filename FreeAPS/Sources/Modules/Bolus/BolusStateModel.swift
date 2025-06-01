@@ -251,65 +251,73 @@ extension Bolus {
             return finalInsulin
         }
       
-        // Proper multiple carb entry detection using real meal aggregation
-        func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
-            let currentTime = Date()
+        // FIXED: Tiered dosing approach (100% up to 65g + fraction thereafter)
+func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
+    let currentTime = Date()
+    let largeMealThreshold: Decimal = 65.0  // Hard-coded threshold, independent of maxCOB
     
-            // Get all meals within 30 minutes using CoreDataStorage
-            let recentMeals = coreDataStorage.fetchRecentMeals(within: 1800)
+    // Get all meals within 30 minutes using CoreDataStorage
+    let recentMeals = coreDataStorage.fetchRecentMeals(within: 1800)
     
-            guard !recentMeals.isEmpty else {
-                logMessage += "\n\nNo recent meals found for multiple entry correction"
-            return 0
-            }
+    guard !recentMeals.isEmpty else {
+        logMessage += "\n\nNo recent meals found for multiple entry correction"
+        return 0
+    }
     
-            // Calculate REAL total carbs from all meal entries
-            let totalMealCarbs = recentMeals.reduce(0) { $0 + Decimal($1.carbs) }
+    // Calculate REAL total carbs from all meal entries
+    let totalMealCarbs = recentMeals.reduce(0) { $0 + Decimal($1.carbs) }
     
-            logMessage += "\n\nFound \(recentMeals.count) recent meal entries:"
-            for (index, meal) in recentMeals.enumerated() {
-                let timeAgo = Int(currentTime.timeIntervalSince(meal.createdAt ?? Date()) / 60)
-                logMessage += "\nEntry \(index + 1): \(Decimal(meal.carbs))g (\(timeAgo)min ago)"
-            }
-            logMessage += "\nREAL total carbs: \(totalMealCarbs)g"
+    logMessage += "\n\nFound \(recentMeals.count) recent meal entries:"
+    for (index, meal) in recentMeals.enumerated() {
+        let timeAgo = Int(currentTime.timeIntervalSince(meal.createdAt ?? Date()) / 60)
+        logMessage += "\nEntry \(index + 1): \(Decimal(meal.carbs))g (\(timeAgo)min ago)"
+    }
+    logMessage += "\nREAL total carbs: \(totalMealCarbs)g"
     
-            // Only apply correction if total exceeds maxCOB
-            guard totalMealCarbs > maxCOB else {
-                logMessage += "\nTotal \(totalMealCarbs)g ≤ maxCOB \(maxCOB)g - No correction needed"
-                return 0
-            }
+    // Only apply correction if total exceeds hard-coded threshold
+    guard totalMealCarbs > largeMealThreshold else {
+        logMessage += "\nTotal \(totalMealCarbs)g ≤ threshold \(largeMealThreshold)g - No correction needed"
+        return 0
+    }
     
-            // Calculate RAW large meal insulin (before safety)
-            let maxCOBInsulin = maxCOB / carbRatio
-            let totalFractionInsulin = (totalMealCarbs / carbRatio) * fraction
-            let largeMealInsulin = max(maxCOBInsulin, totalFractionInsulin)
+    // TIERED DOSING: 100% for first 65g + fraction for additional carbs
+    let baseCarbs = min(totalMealCarbs, largeMealThreshold)  // First 65g
+    let additionalCarbs = max(0, totalMealCarbs - largeMealThreshold)  // Above 65g
     
-            // Add BG correction to large meal calculation
-            let totalLargeMealInsulin = largeMealInsulin + targetDifferenceInsulin
+    // Calculate insulin for each tier
+    let baseInsulin = baseCarbs / carbRatio  // 100% dosing for first 65g
+    let additionalInsulin = (additionalCarbs / carbRatio) * fraction  // Fraction dosing for excess
+    let totalLargeMealInsulin = baseInsulin + additionalInsulin
     
-            // Apply IOB as a reduction (same approach as main calculation)
-            let iobReduction = iob > 0 ? iob : 0
+    // Add BG correction to large meal calculation
+    let totalWithBGCorrection = totalLargeMealInsulin + targetDifferenceInsulin
     
-            // Calculate TOTAL insulin needed for large meal (not additional)
-            let largeMealBeforeSafety = max(0, totalLargeMealInsulin - iobReduction)
+    // Apply IOB as a reduction (same approach as main calculation)
+    let iobReduction = iob > 0 ? iob : 0
     
-            // Apply safety cap to raw amount
-            let safetyMaxInsulin: Decimal = min(6.0, maxBolus * 0.8)  // Child-appropriate cap
-            let cappedLargeMealInsulin = min(largeMealBeforeSafety, safetyMaxInsulin)
+    // Calculate TOTAL insulin needed for large meal (not additional)
+    let largeMealBeforeSafety = max(0, totalWithBGCorrection - iobReduction)
     
-            logMessage += "\nLarge meal (\(totalMealCarbs)g) insulin: \(roundToHundredth(largeMealInsulin))U"
-            logMessage += "\nBG correction: \(roundToHundredth(targetDifferenceInsulin))U"
-            logMessage += "\nTotal before IOB: \(roundToHundredth(totalLargeMealInsulin))U"
-            logMessage += "\nIOB reduction: \(roundToHundredth(iobReduction))U" 
-            logMessage += "\nLARGE MEAL BEFORE SAFETY: \(roundToHundredth(cappedLargeMealInsulin))U"
+    // Apply safety cap to raw amount
+    let safetyMaxInsulin: Decimal = min(6.0, maxBolus * 0.8)  // Child-appropriate cap
+    let cappedLargeMealInsulin = min(largeMealBeforeSafety, safetyMaxInsulin)
     
-            // NOW APPLY THE SAME SAFETY REDUCTIONS AS MAIN CALCULATION
-            let safeLargeMealInsulin = applySafetyReductions(rawInsulin: cappedLargeMealInsulin, isLargeMeal: true)
+    logMessage += "\nTIERED DOSING:"
+    logMessage += "\nFirst \(baseCarbs)g at 100%: \(roundToHundredth(baseInsulin))U"
+    logMessage += "\nAdditional \(additionalCarbs)g at \(Int(fraction * 100))%: \(roundToHundredth(additionalInsulin))U"
+    logMessage += "\nTotal carb insulin: \(roundToHundredth(totalLargeMealInsulin))U"
+    logMessage += "\nBG correction: \(roundToHundredth(targetDifferenceInsulin))U"
+    logMessage += "\nTotal before IOB: \(roundToHundredth(totalWithBGCorrection))U"
+    logMessage += "\nIOB reduction: \(roundToHundredth(iobReduction))U" 
+    logMessage += "\nLARGE MEAL BEFORE SAFETY: \(roundToHundredth(cappedLargeMealInsulin))U"
     
-            logMessage += "\nLARGE MEAL AFTER SAFETY: \(roundToHundredth(safeLargeMealInsulin))U"
+    // Apply the same safety reductions as main calculation
+    let safeLargeMealInsulin = applySafetyReductions(rawInsulin: cappedLargeMealInsulin, isLargeMeal: true)
     
-            return safeLargeMealInsulin > 0 ? roundBolus(safeLargeMealInsulin) : 0
-        }
+    logMessage += "\nLARGE MEAL AFTER SAFETY: \(roundToHundredth(safeLargeMealInsulin))U"
+    
+    return safeLargeMealInsulin > 0 ? roundBolus(safeLargeMealInsulin) : 0
+}
 
         
         // YOUR REPLACEMENT: Enhanced calculateInsulin with logging and safety
