@@ -254,10 +254,11 @@ extension Bolus {
         // FIXED: Tiered dosing approach (100% up to 65g + fraction thereafter)
 // UPDATED: Multiple carb entries with 60-minute window and carb absorption modeling
 func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
-    logMessage += "\n\nTesting settings access"
+    logMessage += "\n\nTesting settings value access"
     
-    // Just test that settings exists
-    logMessage += "\nSettings object exists"
+    // Test the actual settings value
+    let testSetting = settings.preferences.min5mCarbimpact ?? 0
+    logMessage += "\nSettings value: \(testSetting)"
     
     return 0
 }
