@@ -257,7 +257,7 @@ func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     logMessage += "\n\nTesting settings value access"
     
     // Test the actual settings value
-    let testSetting = settings.preferences.min5mCarbimpact ?? 0
+    let testSetting = settings.settings.min5mCarbimpact ?? 0
     logMessage += "\nSettings value: \(testSetting)"
     
     return 0
