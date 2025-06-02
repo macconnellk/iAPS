@@ -254,13 +254,15 @@ extension Bolus {
         // FIXED: Tiered dosing approach (100% up to 65g + fraction thereafter)
 // UPDATED: Multiple carb entries with 60-minute window and carb absorption modeling
 func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
-    logMessage += "\n\nTesting minimal multiple entry detection"
+    logMessage += "\n\nTesting settings access"
     
-    // Test just the CoreData fetch first
-    let recentMeals = coreDataStorage.fetchRecentMeals(within: 3600)
-    logMessage += "\nFound \(recentMeals.count) recent meals"
+    // Test settings access safely
+    if let testSetting = settings.preferences.min5mCarbimpact {
+        logMessage += "\nSettings value: \(testSetting)"
+    } else {
+        logMessage += "\nSettings value is nil"
+    }
     
-    // Return 0 for now - no actual calculation
     return 0
 }
 
