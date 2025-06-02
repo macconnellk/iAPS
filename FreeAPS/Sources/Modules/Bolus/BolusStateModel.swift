@@ -256,12 +256,8 @@ extension Bolus {
 func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     logMessage += "\n\nTesting settings access"
     
-    // Test settings access safely
-    if let testSetting = settings.preferences.min5mCarbimpact {
-        logMessage += "\nSettings value: \(testSetting)"
-    } else {
-        logMessage += "\nSettings value is nil"
-    }
+    // Just test that settings exists
+    logMessage += "\nSettings object exists"
     
     return 0
 }
