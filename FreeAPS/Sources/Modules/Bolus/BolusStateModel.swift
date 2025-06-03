@@ -254,18 +254,16 @@ extension Bolus {
         // FIXED: Tiered dosing approach (100% up to 65g + fraction thereafter)
 // UPDATED: Multiple carb entries with 60-minute window and carb absorption modeling
 func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
-    logMessage += "\n\nExploring SettingsManager structure"
+    logMessage += "\n\nTesting settings access step by step"
     
-    // Test what's actually available in SettingsManager:
-    logMessage += "\nSettingsManager type: \(type(of: settings))"
+    // Test 1: Just the settings object
+    logMessage += "\nStep 1: Settings exists"
     
-    // See what properties are available (these we know work):
-    let threshold = settings.preferences.threshold_setting
-    let increment = settings.preferences.bolusIncrement  
-    logMessage += "\nThreshold: \(threshold), Increment: \(increment)"
+    // Test 2: Try to access settings type
+    logMessage += "\nStep 2: Settings type: \(type(of: settings))"
     
-    // Check if preferences matches the struct you showed:
-    logMessage += "\nPreferences type: \(type(of: settings.preferences))"
+    // Test 3: Try to access preferences (this might be where it crashes)
+    // logMessage += "\nStep 3: Preferences type: \(type(of: settings.preferences))"
     
     return 0
 }
