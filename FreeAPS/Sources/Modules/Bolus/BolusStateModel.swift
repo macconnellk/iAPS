@@ -254,91 +254,20 @@ extension Bolus {
         // FIXED: Tiered dosing approach (100% up to 65g + fraction thereafter)
 // UPDATED: Multiple carb entries with 60-minute window and carb absorption modeling
 func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
-    let currentTime = Date()
-    let largeMealThreshold: Decimal = 65.0  // Hard-coded threshold, independent of maxCOB
+    logMessage += "\n\nExploring SettingsManager structure"
     
-    // Get all meals within 60 minutes using CoreDataStorage
-    let recentMeals = coreDataStorage.fetchRecentMeals(within: 3600) // 60 minutes
+    // Test what's actually available in SettingsManager:
+    logMessage += "\nSettingsManager type: \(type(of: settings))"
     
-    guard !recentMeals.isEmpty else {
-        logMessage += "\n\nNo recent meals found for multiple entry correction"
-        return 0
-    }
+    // See what properties are available (these we know work):
+    let threshold = settings.preferences.threshold_setting
+    let increment = settings.preferences.bolusIncrement  
+    logMessage += "\nThreshold: \(threshold), Increment: \(increment)"
     
-    // HARDCODED for testing - your 30g/hour absorption rate
-    var min_hourly_carb_absorption: Decimal = 30.0
-    var min_5m_carbabsorption: Decimal = 0
-    min_5m_carbabsorption = min_hourly_carb_absorption / (60 / 5)  // 30 ÷ 12 = 2.5g per 5min
+    // Check if preferences matches the struct you showed:
+    logMessage += "\nPreferences type: \(type(of: settings.preferences))"
     
-    // Calculate active carbs using absorption model
-    var totalActiveCarbs: Decimal = 0
-    
-    logMessage += "\n\nFound \(recentMeals.count) recent meal entries:"
-    logMessage += "\nUsing carb absorption: \(min_hourly_carb_absorption)g/hour (\(roundToHundredth(min_5m_carbabsorption))g per 5min)"
-    
-    for (index, meal) in recentMeals.enumerated() {
-        let mealAge = currentTime.timeIntervalSince(meal.createdAt ?? Date()) / 60 // minutes
-        let originalCarbs = Decimal(meal.carbs)
-        
-        // Calculate absorbed carbs using 5-minute absorption model
-        let fiveMinutePeriods = Int(mealAge / 5)
-        let absorbedCarbs = Decimal(fiveMinutePeriods) * min_5m_carbabsorption
-        
-        // Calculate remaining active carbs
-        let activeCarbs = max(0, originalCarbs - absorbedCarbs)
-        totalActiveCarbs += activeCarbs
-        
-        let timeAgo = Int(mealAge)
-        logMessage += "\nEntry \(index + 1): \(originalCarbs)g (\(timeAgo)min ago) - \(roundToHundredth(absorbedCarbs))g absorbed = \(roundToHundredth(activeCarbs))g active"
-    }
-    
-    let totalRawCarbs = recentMeals.reduce(0) { $0 + Decimal($1.carbs) }
-    logMessage += "\nRAW total carbs: \(totalRawCarbs)g"
-    logMessage += "\nACTIVE total carbs: \(roundToHundredth(totalActiveCarbs))g"
-    
-    // Only apply correction if active carbs exceed threshold
-    guard totalActiveCarbs > largeMealThreshold else {
-        logMessage += "\nActive carbs \(roundToHundredth(totalActiveCarbs))g ≤ threshold \(largeMealThreshold)g - No correction needed"
-        return 0
-    }
-    
-    // TIERED DOSING: 100% for first 65g + fraction for additional carbs (using active carbs)
-    let baseCarbs = min(totalActiveCarbs, largeMealThreshold)  // First 65g
-    let additionalCarbs = max(0, totalActiveCarbs - largeMealThreshold)  // Above 65g
-    
-    // Calculate insulin for each tier
-    let baseInsulin = baseCarbs / carbRatio  // 100% dosing for first 65g
-    let additionalInsulin = (additionalCarbs / carbRatio) * fraction  // Fraction dosing for excess
-    let totalLargeMealInsulin = baseInsulin + additionalInsulin
-    
-    // Add BG correction to large meal calculation
-    let totalWithBGCorrection = totalLargeMealInsulin + targetDifferenceInsulin
-    
-    // Apply IOB as a reduction (same approach as main calculation)
-    let iobReduction = iob > 0 ? iob : 0
-    
-    // Calculate TOTAL insulin needed for large meal (not additional)
-    let largeMealBeforeSafety = max(0, totalWithBGCorrection - iobReduction)
-    
-    // Apply safety cap to raw amount
-    let safetyMaxInsulin: Decimal = min(6.0, maxBolus * 0.8)  // Child-appropriate cap
-    let cappedLargeMealInsulin = min(largeMealBeforeSafety, safetyMaxInsulin)
-    
-    logMessage += "\nTIERED DOSING (using active carbs):"
-    logMessage += "\nFirst \(roundToHundredth(baseCarbs))g at 100%: \(roundToHundredth(baseInsulin))U"
-    logMessage += "\nAdditional \(roundToHundredth(additionalCarbs))g at \(Int(fraction * 100))%: \(roundToHundredth(additionalInsulin))U"
-    logMessage += "\nTotal carb insulin: \(roundToHundredth(totalLargeMealInsulin))U"
-    logMessage += "\nBG correction: \(roundToHundredth(targetDifferenceInsulin))U"
-    logMessage += "\nTotal before IOB: \(roundToHundredth(totalWithBGCorrection))U"
-    logMessage += "\nIOB reduction: \(roundToHundredth(iobReduction))U" 
-    logMessage += "\nLARGE MEAL BEFORE SAFETY: \(roundToHundredth(cappedLargeMealInsulin))U"
-    
-    // Apply the same safety reductions as main calculation
-    let safeLargeMealInsulin = applySafetyReductions(rawInsulin: cappedLargeMealInsulin, isLargeMeal: true)
-    
-    logMessage += "\nLARGE MEAL AFTER SAFETY: \(roundToHundredth(safeLargeMealInsulin))U"
-    
-    return safeLargeMealInsulin > 0 ? roundBolus(safeLargeMealInsulin) : 0
+    return 0
 }
 
         
