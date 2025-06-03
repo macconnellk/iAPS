@@ -254,16 +254,10 @@ extension Bolus {
         // FIXED: Tiered dosing approach (100% up to 65g + fraction thereafter)
 // UPDATED: Multiple carb entries with 60-minute window and carb absorption modeling
 func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
-    logMessage += "\n\nTesting settings access step by step"
+    logMessage += "\n\nTesting preferences access"
     
-    // Test 1: Just the settings object
-    logMessage += "\nStep 1: Settings exists"
-    
-    // Test 2: Try to access settings type
-    logMessage += "\nStep 2: Settings type: \(type(of: settings))"
-    
-    // Test 3: Try to access preferences (this might be where it crashes)
-    // logMessage += "\nStep 3: Preferences type: \(type(of: settings.preferences))"
+    logMessage += "\nSettings type: \(type(of: settings))"
+    logMessage += "\nPreferences type: \(type(of: settings.preferences))"
     
     return 0
 }
