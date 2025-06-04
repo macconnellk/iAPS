@@ -14,7 +14,6 @@ extension Bolus {
         @State private var keepForNextWiew: Bool = false
         @State private var remoteBolusAlert: Alert?
         @State private var isRemoteBolusAlertPresented: Bool = false
-        // Add this large meal settings state variable near your other @State variables
         @State private var showLargeMealSettings = false
 
         private enum Config {
@@ -112,71 +111,12 @@ extension Bolus {
                                 .buttonStyle(PlainButtonStyle())
                                 .frame(maxWidth: .infinity, alignment: .leading)
 
-                                // ADD THE LARGE MEAL SETTINGS BUTTON HERE 
-                                Button(action: { showLargeMealSettings.toggle() }) {
+                            Button(action: { showLargeMealSettings.toggle() }) {
                                 Image(systemName: "info.circle")
-                                .foregroundColor(.secondary)
-                        }
-                        .popover(isPresented: $showLargeMealSettings) {
-                            VStack(alignment: .leading, spacing: 16) {
-                                Text("Large Meal Detection Settings")
-                                    .font(.headline)
-                                    .padding(.bottom, 8)
-                                
-                                Toggle("Enable Large Meal Detection", isOn: $viewModel.enableLargeMealMode)
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Time Window: \(Int(viewModel.largeMealTimeWindow)) minutes")
-                                        .font(.caption)
-                                    Slider(value: $viewModel.largeMealTimeWindow, in: 30...120, step: 15)
-                                    Text("Look back this many minutes for meal entries")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                }
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Threshold: \(Int(viewModel.largeMealThreshold))g")
-                                        .font(.caption)
-                                    Slider(value: $viewModel.largeMealThreshold, in: 50...100, step: 5)
-                                    Text("Trigger large meal logic above this amount")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                }
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Absorption Rate: \(Int(viewModel.carbAbsorptionRate))g/hour")
-                                        .font(.caption)
-                                    Slider(value: $viewModel.carbAbsorptionRate, in: 20...40, step: 5)
-                                    Text("Carb absorption rate for decay calculation")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                }
-                                
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text("Large Meal Fraction: \(Int(viewModel.largeMealFraction * 100))%")
-                                        .font(.caption)
-                                    Slider(value: $viewModel.largeMealFraction, in: 0.5...1.0, step: 0.05)
-                                    Text("Fraction applied to additional carbs above threshold")
-                                        .font(.caption2)
-                                        .foregroundColor(.secondary)
-                                }
-                                
-                                Button("Reset to Defaults") {
-                                    viewModel.enableLargeMealMode = true
-                                    viewModel.largeMealTimeWindow = 60
-                                    viewModel.largeMealThreshold = 65
-                                    viewModel.carbAbsorptionRate = 30
-                                    viewModel.largeMealFraction = 0.8
-                                }
-                                .font(.caption)
-                                .foregroundColor(.blue)
-                                .padding(.top, 8)
+                                    .foregroundColor(.secondary)
                             }
-                            .padding()
-                            .frame(width: 320, height: 400)
-                        }
-                            // End Large Meal Settings Addition
-                            // Continue original code
+                            .buttonStyle(PlainButtonStyle())
+
                             if state.fattyMeals {
                                 Spacer()
                                 Toggle(isOn: $state.useFattyMealCorrectionFactor) {
@@ -320,6 +260,64 @@ extension Bolus {
                     }
                 }
             }
+            .popover(isPresented: $showLargeMealSettings) {
+                VStack(alignment: .leading, spacing: 16) {
+                    Text("Large Meal Detection Settings")
+                        .font(.headline)
+                        .padding(.bottom, 8)
+                    
+                    Toggle("Enable Large Meal Detection", isOn: $state.enableLargeMealMode)
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Time Window: \(Int(state.largeMealTimeWindow)) minutes")
+                            .font(.caption)
+                        Slider(value: $state.largeMealTimeWindow, in: 30...120, step: 15)
+                        Text("Look back this many minutes for meal entries")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Threshold: \(Int(state.largeMealThreshold))g")
+                            .font(.caption)
+                        Slider(value: $state.largeMealThreshold, in: 50...100, step: 5)
+                        Text("Trigger large meal logic above this amount")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Absorption Rate: \(Int(state.carbAbsorptionRate))g/hour")
+                            .font(.caption)
+                        Slider(value: $state.carbAbsorptionRate, in: 20...40, step: 5)
+                        Text("Carb absorption rate for decay calculation")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text("Large Meal Fraction: \(Int(state.largeMealFraction * 100))%")
+                            .font(.caption)
+                        Slider(value: $state.largeMealFraction, in: 0.5...1.0, step: 0.05)
+                        Text("Fraction applied to additional carbs above threshold")
+                            .font(.caption2)
+                            .foregroundColor(.secondary)
+                    }
+                    
+                    Button("Reset to Defaults") {
+                        state.enableLargeMealMode = true
+                        state.largeMealTimeWindow = 60
+                        state.largeMealThreshold = 65
+                        state.carbAbsorptionRate = 30
+                        state.largeMealFraction = 0.8
+                    }
+                    .font(.caption)
+                    .foregroundColor(.blue)
+                    .padding(.top, 8)
+                }
+                .padding()
+                .frame(width: 320, height: 400)
+            }
             .interactiveDismissDisabled()
             .compactSectionSpacing()
             .alert(isPresented: $isRemoteBolusAlertPresented) {
@@ -407,7 +405,7 @@ extension Bolus {
             }
             .background(
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
-                    .fill(Color(colorScheme == .dark ? UIColor.systemGray4 : UIColor.systemGray5))
+                .fill(Color(colorScheme == .dark ? UIColor.systemGray4 : UIColor.systemGray5))
             )
         }
     }
