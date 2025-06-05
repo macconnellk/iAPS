@@ -268,174 +268,30 @@ extension Bolus {
         }
       
         // Tiered dosing approach
-        // DEBUG VERSION: Let's identify the exact build issue step by step
-func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
-    // Check if large meal mode is enabled
+        func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
+    // Test 1: Basic guard
     guard enableLargeMealMode else { 
-        logMessage += "\n\nLarge meal mode disabled"
         return 0 
     }
     
-    let currentTime = Date()
-    let largeMealThresholdDecimal = Decimal(largeMealThreshold)
-    let timeWindowSeconds = largeMealTimeWindow * 60
-    let startTime = currentTime.addingTimeInterval(-timeWindowSeconds)
-    
-    // Get current entry being calculated - check if 'meal' property exists
-    guard let mealEntry = meal?.first else {
-        logMessage += "\n\nNo meal entry found"
+    // Test 2: Can we access meal?
+    guard let mealCarbs = meal?.first?.carbs else {
+        logMessage += "\nNo meal found"
         return 0
     }
     
-    let currentCarbs = mealEntry.carbs
-    guard currentCarbs > 0 else {
-        logMessage += "\n\nNo current carb entry for large meal detection"
-        return 0
+    // Test 3: Can we access carbsStorage?
+    logMessage += "\nTesting carbsStorage access..."
+    
+    // THIS IS THE CRITICAL TEST - does carbsStorage exist and what type is it?
+    carbsStorage.getCarbEntries(start: Date(), end: Date()) { result in
+        // Empty callback for now
     }
     
-    logMessage += "\n\nTesting carbsStorage access..."
+    logMessage += "\nCarbsStorage call successful"
     
-    // STEP 1: Test if carbsStorage is accessible
-    guard let storage = carbsStorage else {
-        logMessage += "\nERROR: carbsStorage is nil"
-        return 0
-    }
-    
-    logMessage += "\nCarbsStorage found, attempting to fetch entries..."
-    
-    // STEP 2: Very simple approach - no complex threading
-    var savedEntries: [StoredCarbEntry] = []
-    var hasResult = false
-    var fetchError: Error?
-    
-    // Make the call
-    storage.getCarbEntries(start: startTime, end: currentTime) { result in
-        switch result {
-        case .success(let entries):
-            savedEntries = entries
-            logMessage += "\nSuccess: Found \(entries.count) entries"
-        case .failure(let error):
-            fetchError = error
-            logMessage += "\nError: \(error.localizedDescription)"
-        }
-        hasResult = true
-    }
-    
-    // Simple wait without complex threading
-    var waitCount = 0
-    let maxWaits = 100 // 10 seconds at 100ms intervals
-    
-    while !hasResult && waitCount < maxWaits {
-        usleep(100000) // 100ms in microseconds
-        waitCount += 1
-    }
-    
-    if !hasResult {
-        logMessage += "\nTimeout waiting for carb entries"
-        return currentCalculatedInsulin // Return original calculation
-    }
-    
-    if let error = fetchError {
-        logMessage += "\nFetch failed: \(error.localizedDescription)"
-        return currentCalculatedInsulin // Return original calculation
-    }
-    
-    // STEP 3: Process the data we got
-    logMessage += "\nProcessing \(savedEntries.count) saved entries..."
-    
-    // Filter valid entries
-    let validEntries = savedEntries.filter { entry in
-        let age = currentTime.timeIntervalSince(entry.startDate)
-        let withinWindow = age >= 0 && age <= timeWindowSeconds
-        let hasCarbs = entry.quantity.doubleValue(for: .gram()) > 0
-        return withinWindow && hasCarbs
-    }
-    
-    logMessage += "\nValid saved entries: \(validEntries.count)"
-    
-    // Create simple entry list
-    var allEntries: [(carbs: Double, date: Date)] = []
-    
-    // Add saved entries
-    for entry in validEntries {
-        let carbGrams = entry.quantity.doubleValue(for: .gram())
-        allEntries.append((carbs: carbGrams, date: entry.startDate))
-    }
-    
-    // Add current entry
-    allEntries.append((carbs: Double(currentCarbs), date: currentTime))
-    
-    // Sort by date
-    allEntries.sort { $0.date < $1.date }
-    
-    logMessage += "\nTotal entries for analysis: \(allEntries.count)"
-    
-    // STEP 4: Simple active carb calculation
-    let absorptionRate = Decimal(carbAbsorptionRate)
-    let absorptionPer5Min = absorptionRate / (60 / 5)
-    var totalActiveCarbs: Decimal = 0
-    
-    for (index, entry) in allEntries.enumerated() {
-        let ageInMinutes = currentTime.timeIntervalSince(entry.date) / 60
-        let originalCarbs = Decimal(entry.carbs)
-        
-        // Calculate absorbed amount
-        let fiveMinPeriods = Int(max(0, ageInMinutes) / 5)
-        let absorbedCarbs = Decimal(fiveMinPeriods) * absorptionPer5Min
-        let activeCarbs = max(0, originalCarbs - absorbedCarbs)
-        
-        totalActiveCarbs += activeCarbs
-        
-        let entryType = (index == allEntries.count - 1) ? "CURRENT" : "SAVED"
-        let ageMin = Int(max(0, ageInMinutes))
-        logMessage += "\n\(entryType): \(originalCarbs)g (\(ageMin)m ago) → \(roundToHundredth(activeCarbs))g active"
-    }
-    
-    logMessage += "\nTotal active carbs: \(roundToHundredth(totalActiveCarbs))g"
-    logMessage += "\nThreshold: \(largeMealThresholdDecimal)g"
-    
-    // STEP 5: Check if we need large meal calculation
-    guard totalActiveCarbs > largeMealThresholdDecimal else {
-        logMessage += "\nBelow threshold - no large meal adjustment"
-        return currentCalculatedInsulin // Return original
-    }
-    
-    logMessage += "\nLARGE MEAL DETECTED - Calculating tiered dosing..."
-    
-    // STEP 6: Simple tiered calculation
-    let baseCarbs = min(totalActiveCarbs, largeMealThresholdDecimal)
-    let excessCarbs = max(0, totalActiveCarbs - largeMealThresholdDecimal)
-    
-    guard carbRatio > 0 else {
-        logMessage += "\nERROR: Invalid carb ratio"
-        return currentCalculatedInsulin
-    }
-    
-    let baseInsulin = baseCarbs / carbRatio
-    let excessInsulin = (excessCarbs / carbRatio) * Decimal(largeMealFraction)
-    let totalCarbInsulin = baseInsulin + excessInsulin
-    
-    // Add BG correction
-    let withCorrection = totalCarbInsulin + targetDifferenceInsulin
-    
-    // Subtract IOB
-    let iobReduction = max(0, iob)
-    let beforeSafety = max(0, withCorrection - iobReduction)
-    
-    // Apply safety cap
-    let maxSafeInsulin = min(Decimal(6.0), maxBolus * Decimal(0.8))
-    let cappedInsulin = min(beforeSafety, maxSafeInsulin)
-    
-    logMessage += "\nBase \(roundToHundredth(baseCarbs))g → \(roundToHundredth(baseInsulin))U"
-    logMessage += "\nExcess \(roundToHundredth(excessCarbs))g → \(roundToHundredth(excessInsulin))U"
-    logMessage += "\nTotal before safety: \(roundToHundredth(cappedInsulin))U"
-    
-    // Apply your existing safety function
-    let finalInsulin = applySafetyReductions(rawInsulin: cappedInsulin, isLargeMeal: true)
-    
-    logMessage += "\nFinal large meal insulin: \(roundToHundredth(finalInsulin))U"
-    
-    return finalInsulin > 0 ? roundBolus(finalInsulin) : 0
+    // For now, just return 0 - we're testing compilation
+    return 0
 }
 
  
