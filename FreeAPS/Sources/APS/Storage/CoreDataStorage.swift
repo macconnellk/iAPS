@@ -46,7 +46,6 @@ final class CoreDataStorage {
         return uniqueEvents
     }
 
-    
     func saveTDD(_ insulin: (bolus: Decimal, basal: Decimal, hours: Double)) {
         coredataContext.perform {
             let saveToTDD = TDD(context: self.coredataContext)
