@@ -267,60 +267,20 @@ extension Bolus {
             return finalInsulin
         }
       
-        // FIXED: Tiered dosing approach (100% up to 65g + fraction thereafter)
-// UPDATED: Multiple carb entries with 60-minute window and carb absorption modeling
-        
-        func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
+        // Updated checkForMultipleCarbEntries function:
+func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     // Check if large meal mode is enabled
     guard enableLargeMealMode else { return 0 }
     
     let currentTime = Date()
     let largeMealThresholdDecimal = Decimal(largeMealThreshold)
+    
+    // Get all meals within user-defined time window
     let timeWindowSeconds = largeMealTimeWindow * 60
-    let startTime = currentTime.addingTimeInterval(-timeWindowSeconds)
+    let recentMeals = coreDataStorage.fetchRecentMeals(within: timeWindowSeconds)
     
-    // Get current entry being calculated
-    let currentCarbs = meal.first?.carbs ?? 0
-    guard currentCarbs > 0 else {
-        logMessage += "\n\nNo current carb entry for large meal detection"
-        return 0
-    }
-    
-    // Get saved carb entries from carbsStorage (synchronous call needed)
-    var savedEntries: [StoredCarbEntry] = []
-    let dispatchGroup = DispatchGroup()
-    var fetchError: Error?
-    
-    dispatchGroup.enter()
-    carbsStorage.getCarbEntries(start: startTime, end: currentTime) { result in
-        switch result {
-        case .success(let entries):
-            savedEntries = entries
-        case .failure(let error):
-            fetchError = error
-        }
-        dispatchGroup.leave()
-    }
-    dispatchGroup.wait()
-    
-    guard fetchError == nil else {
-        logMessage += "\n\nError fetching carb entries: \(fetchError!)"
-        return 0
-    }
-    
-    // Create current entry for calculation
-    let currentEntry = (carbs: Double(currentCarbs), date: currentTime)
-    
-    // Combine all entries (saved + current)
-    var allEntries: [(carbs: Double, date: Date)] = []
-    allEntries.append(contentsOf: savedEntries.map { (carbs: $0.quantity.doubleValue(for: .gram()), date: $0.startDate) })
-    allEntries.append(currentEntry)
-    
-    // Sort by date (oldest first)
-    allEntries.sort { $0.date < $1.date }
-    
-    guard allEntries.count > 0 else {
-        logMessage += "\n\nNo entries found for multiple entry correction"
+    guard !recentMeals.isEmpty else {
+        logMessage += "\n\nNo recent meals found for multiple entry correction"
         return 0
     }
     
@@ -332,27 +292,26 @@ extension Bolus {
     // Calculate active carbs using absorption model
     var totalActiveCarbs: Decimal = 0
     
-    logMessage += "\n\nFound \(allEntries.count) carb entries (including current):"
+    logMessage += "\n\nFound \(recentMeals.count) recent meal entries:"
     logMessage += "\nUsing carb absorption: \(min_hourly_carb_absorption)g/hour (\(roundToHundredth(min_5m_carbabsorption))g per 5min)"
     
-    for (index, entry) in allEntries.enumerated() {
-        let mealAge = currentTime.timeIntervalSince(entry.date) / 60 // minutes
-        let originalCarbs = Decimal(entry.carbs)
+    for (index, meal) in recentMeals.enumerated() {
+        let mealAge = currentTime.timeIntervalSince(meal.createdAt ?? Date()) / 60 // minutes
+        let originalCarbs = Decimal(meal.carbs)
         
         // Calculate absorbed carbs using 5-minute absorption model
-        let fiveMinutePeriods = Int(max(0, mealAge) / 5)
+        let fiveMinutePeriods = Int(mealAge / 5)
         let absorbedCarbs = Decimal(fiveMinutePeriods) * min_5m_carbabsorption
         
         // Calculate remaining active carbs
         let activeCarbs = max(0, originalCarbs - absorbedCarbs)
         totalActiveCarbs += activeCarbs
         
-        let timeAgo = Int(max(0, mealAge))
-        let entryType = (index == allEntries.count - 1) ? "CURRENT" : "SAVED"
-        logMessage += "\n\(entryType) Entry \(index + 1): \(originalCarbs)g (\(timeAgo)min ago) - \(roundToHundredth(absorbedCarbs))g absorbed = \(roundToHundredth(activeCarbs))g active"
+        let timeAgo = Int(mealAge)
+        logMessage += "\nEntry \(index + 1): \(originalCarbs)g (\(timeAgo)min ago) - \(roundToHundredth(absorbedCarbs))g absorbed = \(roundToHundredth(activeCarbs))g active"
     }
     
-    let totalRawCarbs = allEntries.reduce(0) { $0 + Decimal($1.carbs) }
+    let totalRawCarbs = recentMeals.reduce(0) { $0 + Decimal($1.carbs) }
     logMessage += "\nRAW total carbs: \(totalRawCarbs)g"
     logMessage += "\nACTIVE total carbs: \(roundToHundredth(totalActiveCarbs))g"
     
