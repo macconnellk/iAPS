@@ -6,6 +6,24 @@ import Swinject
 final class CoreDataStorage {
     let coredataContext = CoreDataStack.shared.persistentContainer.viewContext
 
+    // Custom Function to get past meals
+    func fetchRecentMeals(within timeInterval: TimeInterval = 1800) -> [Meals] {
+        var meals = [Meals]()
+        let cutoffTime = Date().addingTimeInterval(-timeInterval)
+        
+        coredataContext.performAndWait {
+            let requestMeals = Meals.fetchRequest() as NSFetchRequest<Meals>
+            let sort = NSSortDescriptor(key: "createdAt", ascending: false)
+            requestMeals.sortDescriptors = [sort]
+            requestMeals.predicate = NSPredicate(
+                format: "createdAt > %@ AND carbs > 0", cutoffTime as NSDate
+            )
+            try? meals = coredataContext.fetch(requestMeals)
+        }
+        return meals
+    }
+    
+    
     func fetchGlucose(interval: NSDate) -> [Readings] {
         var fetchGlucose = [Readings]()
         coredataContext.performAndWait {
