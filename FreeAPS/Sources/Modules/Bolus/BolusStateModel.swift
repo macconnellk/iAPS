@@ -283,41 +283,45 @@ extension Bolus {
         }
       
         // Tiered dosing approach
-       // STEP BY STEP: Let's find exactly what's causing the build failure
+       // STEP BY STEP: Now let's add the carbsStorage call
 func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
-    // STEP 1: Basic guards (this worked before)
     guard enableLargeMealMode else { 
         logMessage += "\n\nLarge meal mode disabled"
         return 0 
     }
     
-    // STEP 2: Basic date calculations (should be fine)
     let currentTime = Date()
     let largeMealThresholdDecimal = Decimal(largeMealThreshold)
     let timeWindowSeconds = largeMealTimeWindow * 60
     let startTime = currentTime.addingTimeInterval(-timeWindowSeconds)
     
-    // STEP 3: Test getEffectiveRecentCarbs() function (this might be the issue)
     let currentCarbs = getEffectiveRecentCarbs()
     guard currentCarbs > 0 else {
         logMessage += "\n\nNo current carb entry for large meal detection"
         return 0
     }
     
-    logMessage += "\n\nTesting carbsStorage access - Step 1"
+    logMessage += "\n\nAttempting carbsStorage.getCarbEntries call..."
     
-    // STEP 4: Test if we can even reference carbsStorage without calling it
-    // This is the critical test - can we access carbsStorage?
-    let _ = carbsStorage // Just reference it, don't call it yet
+    // STEP 6: Try the actual carbsStorage call (this might be what breaks)
+    var savedEntries: [StoredCarbEntry] = []
+    var fetchCompleted = false
     
-    logMessage += "\nCarbsStorage reference successful - Step 2"
+    carbsStorage.getCarbEntries(start: startTime, end: currentTime) { result in
+        switch result {
+        case .success(let entries):
+            savedEntries = entries
+        case .failure:
+            break // Ignore errors for now
+        }
+        fetchCompleted = true
+    }
     
-    // STEP 5: For now, just return 0 - we're testing what breaks the build
-    logMessage += "\nReturning 0 for testing - Step 3"
+    logMessage += "\nCarbsStorage call completed without build error"
     
+    // For now, just return 0 - we're testing if the call itself builds
     return 0
 }
-
  
 
         
