@@ -280,6 +280,7 @@ extension Bolus {
         }
       
         // Updated checkForMultipleCarbEntries function:
+
 func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     // Check if large meal mode is enabled
     guard enableLargeMealMode else { return 0 }
@@ -287,12 +288,20 @@ func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     let currentTime = Date()
     let largeMealThresholdDecimal = Decimal(largeMealThreshold)
     
-    // Get all meals within user-defined time window
+    // CHANGE: Use carbsStorage instead of coreDataStorage
+    // This automatically filters out cancelled carbs because they never made it to CarbStore
     let timeWindowSeconds = largeMealTimeWindow * 60
-    let recentMeals = coreDataStorage.fetchRecentMeals(within: timeWindowSeconds)
+    let cutoffTime = currentTime.addingTimeInterval(-timeWindowSeconds)
     
-    guard !recentMeals.isEmpty else {
-        logMessage += "\n\nNo recent meals found for multiple entry correction"
+    // Get committed carbs from CarbStore (same source as History screen)
+    let allCarbEntries = carbsStorage.recent()
+    let recentCarbEntries = allCarbEntries.filter { entry in
+        guard let entryDate = entry.actualDate ?? entry.createdAt else { return false }
+        return entryDate > cutoffTime && entry.carbs > 0 && !(entry.isFPU ?? false)
+    }
+    
+    guard !recentCarbEntries.isEmpty else {
+        logMessage += "\n\nNo recent committed carb entries found for multiple entry correction"
         return 0
     }
     
@@ -304,12 +313,13 @@ func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     // Calculate active carbs using absorption model
     var totalActiveCarbs: Decimal = 0
     
-    logMessage += "\n\nFound \(recentMeals.count) recent meal entries:"
+    logMessage += "\n\nFound \(recentCarbEntries.count) committed carb entries (cancelled entries excluded):"
     logMessage += "\nUsing carb absorption: \(min_hourly_carb_absorption)g/hour (\(roundToHundredth(min_5m_carbabsorption))g per 5min)"
     
-    for (index, meal) in recentMeals.enumerated() {
-        let mealAge = currentTime.timeIntervalSince(meal.createdAt ?? Date()) / 60 // minutes
-        let originalCarbs = Decimal(meal.carbs)
+    for (index, entry) in recentCarbEntries.enumerated() {
+        let entryDate = entry.actualDate ?? entry.createdAt ?? currentTime
+        let mealAge = currentTime.timeIntervalSince(entryDate) / 60 // minutes
+        let originalCarbs = entry.carbs
         
         // Calculate absorbed carbs using 5-minute absorption model
         let fiveMinutePeriods = Int(mealAge / 5)
@@ -323,7 +333,7 @@ func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
         logMessage += "\nEntry \(index + 1): \(originalCarbs)g (\(timeAgo)min ago) - \(roundToHundredth(absorbedCarbs))g absorbed = \(roundToHundredth(activeCarbs))g active"
     }
     
-    let totalRawCarbs = recentMeals.reduce(0) { $0 + Decimal($1.carbs) }
+    let totalRawCarbs = recentCarbEntries.reduce(0) { $0 + $1.carbs }
     logMessage += "\nRAW total carbs: \(totalRawCarbs)g"
     logMessage += "\nACTIVE total carbs: \(roundToHundredth(totalActiveCarbs))g"
     
