@@ -266,6 +266,21 @@ extension Bolus {
     
             return finalInsulin
         }
+
+        func getEffectiveRecentCarbs() -> Decimal {
+            // If we have a manual carb entry, use that
+            if manualCarbEntry > 0 {
+                return manualCarbEntry
+            }
+    
+            // Otherwise, use the meal entry carbs
+            if let mealCarbs = meal?.first?.carbs, mealCarbs > 0 {
+                return mealCarbs
+            }
+    
+            // Fallback to recent carbs if available
+            return recentCarbs
+        }
       
         // Tiered dosing approach
        // SAFE STUB: This should definitely compile
