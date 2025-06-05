@@ -268,9 +268,9 @@ extension Bolus {
         }
       
         // FIXED: Tiered dosing approach (100% up to 65g + fraction thereafter)
-// UPDATED: Multiple carb entries with 60-minute window and carb absorption modeling
-        
-        func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
+        // UPDATED: Multiple carb entries with 60-minute window and carb absorption modeling
+        // FIXED: Safe carbsStorage integration to eliminate phantom entries
+func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     // Check if large meal mode is enabled
     guard enableLargeMealMode else { return 0 }
     
@@ -286,53 +286,82 @@ extension Bolus {
         return 0
     }
     
-    // Get saved carb entries from carbsStorage (synchronous call needed)
+    // FIXED: Use async/await pattern to safely get carb entries
     var savedEntries: [StoredCarbEntry] = []
-    let dispatchGroup = DispatchGroup()
     var fetchError: Error?
     
-    dispatchGroup.enter()
+    // Create a semaphore for synchronous waiting
+    let semaphore = DispatchSemaphore(value: 0)
+    
+    // Use the injected carbsStorage from StateModel
     carbsStorage.getCarbEntries(start: startTime, end: currentTime) { result in
+        defer { semaphore.signal() }
+        
         switch result {
         case .success(let entries):
             savedEntries = entries
+            fetchError = nil
         case .failure(let error):
             fetchError = error
+            savedEntries = []
         }
-        dispatchGroup.leave()
     }
-    dispatchGroup.wait()
     
-    guard fetchError == nil else {
-        logMessage += "\n\nError fetching carb entries: \(fetchError!)"
+    // Wait for completion with timeout
+    let timeoutResult = semaphore.wait(timeout: .now() + 2.0)
+    
+    if timeoutResult == .timedOut {
+        logMessage += "\n\nTimeout fetching carb entries - using current entry only"
+        savedEntries = []
+    } else if let error = fetchError {
+        logMessage += "\n\nError fetching carb entries: \(error.localizedDescription) - using current entry only"
+        savedEntries = []
+    }
+    
+    // SAFETY: Always filter out entries that are too old or invalid
+    let validSavedEntries = savedEntries.filter { entry in
+        // Only include entries within our time window
+        let entryAge = currentTime.timeIntervalSince(entry.startDate)
+        let isWithinWindow = entryAge >= 0 && entryAge <= timeWindowSeconds
+        
+        // Only include entries with positive carbs
+        let hasValidCarbs = entry.quantity.doubleValue(for: .gram()) > 0
+        
+        return isWithinWindow && hasValidCarbs
+    }
+    
+    // Create current entry for calculation (only if it has carbs)
+    guard currentCarbs > 0 else {
+        logMessage += "\n\nNo current carbs to calculate"
         return 0
     }
     
-    // Create current entry for calculation
     let currentEntry = (carbs: Double(currentCarbs), date: currentTime)
     
     // Combine all entries (saved + current)
     var allEntries: [(carbs: Double, date: Date)] = []
-    allEntries.append(contentsOf: savedEntries.map { (carbs: $0.quantity.doubleValue(for: .gram()), date: $0.startDate) })
+    allEntries.append(contentsOf: validSavedEntries.map { 
+        (carbs: $0.quantity.doubleValue(for: .gram()), date: $0.startDate) 
+    })
     allEntries.append(currentEntry)
     
     // Sort by date (oldest first)
     allEntries.sort { $0.date < $1.date }
     
     guard allEntries.count > 0 else {
-        logMessage += "\n\nNo entries found for multiple entry correction"
+        logMessage += "\n\nNo valid entries found for large meal calculation"
         return 0
     }
     
     // Use user-defined absorption rate
-    var min_hourly_carb_absorption = Decimal(carbAbsorptionRate)
-    var min_5m_carbabsorption: Decimal = 0
-    min_5m_carbabsorption = min_hourly_carb_absorption / (60 / 5)
+    let min_hourly_carb_absorption = Decimal(carbAbsorptionRate)
+    let min_5m_carbabsorption = min_hourly_carb_absorption / (60 / 5)
     
     // Calculate active carbs using absorption model
     var totalActiveCarbs: Decimal = 0
     
-    logMessage += "\n\nFound \(allEntries.count) carb entries (including current):"
+    logMessage += "\n\nLarge Meal Analysis:"
+    logMessage += "\nSaved entries: \(validSavedEntries.count), Current: 1"
     logMessage += "\nUsing carb absorption: \(min_hourly_carb_absorption)g/hour (\(roundToHundredth(min_5m_carbabsorption))g per 5min)"
     
     for (index, entry) in allEntries.enumerated() {
@@ -358,48 +387,47 @@ extension Bolus {
     
     // Only apply correction if active carbs exceed user-defined threshold
     guard totalActiveCarbs > largeMealThresholdDecimal else {
-        logMessage += "\nActive carbs \(roundToHundredth(totalActiveCarbs))g ≤ threshold \(largeMealThresholdDecimal)g - No correction needed"
+        logMessage += "\nActive carbs \(roundToHundredth(totalActiveCarbs))g ≤ threshold \(largeMealThresholdDecimal)g - No large meal correction"
         return 0
     }
     
     // TIERED DOSING: 100% for first portion + user-defined fraction for additional carbs
-    let baseCarbs = min(totalActiveCarbs, largeMealThresholdDecimal)  // First portion at threshold
-    let additionalCarbs = max(0, totalActiveCarbs - largeMealThresholdDecimal)  // Above threshold
+    let baseCarbs = min(totalActiveCarbs, largeMealThresholdDecimal)
+    let additionalCarbs = max(0, totalActiveCarbs - largeMealThresholdDecimal)
     
-    // Calculate insulin for each tier using separate fractions
-    let baseInsulin = baseCarbs / carbRatio  // 100% dosing for first portion
-    let additionalInsulin = (additionalCarbs / carbRatio) * Decimal(largeMealFraction)  // User-defined fraction for excess
+    // Calculate insulin for each tier
+    let baseInsulin = baseCarbs / carbRatio
+    let additionalInsulin = (additionalCarbs / carbRatio) * Decimal(largeMealFraction)
     let totalLargeMealInsulin = baseInsulin + additionalInsulin
     
     // Add BG correction to large meal calculation
     let totalWithBGCorrection = totalLargeMealInsulin + targetDifferenceInsulin
     
-    // Apply IOB as a reduction (same approach as main calculation)
+    // Apply IOB as a reduction
     let iobReduction = iob > 0 ? iob : 0
-    
-    // Calculate TOTAL insulin needed for large meal (not additional)
     let largeMealBeforeSafety = max(0, totalWithBGCorrection - iobReduction)
     
-    // Apply safety cap to raw amount
-    let safetyMaxInsulin: Decimal = min(6.0, maxBolus * 0.8)  // Child-appropriate cap
+    // Apply safety cap
+    let safetyMaxInsulin: Decimal = min(6.0, maxBolus * 0.8)
     let cappedLargeMealInsulin = min(largeMealBeforeSafety, safetyMaxInsulin)
     
-    logMessage += "\nTIERED DOSING (using active carbs):"
+    logMessage += "\nLARGE MEAL CALCULATION:"
     logMessage += "\nFirst \(roundToHundredth(baseCarbs))g at 100%: \(roundToHundredth(baseInsulin))U"
     logMessage += "\nAdditional \(roundToHundredth(additionalCarbs))g at \(Int(largeMealFraction * 100))%: \(roundToHundredth(additionalInsulin))U"
     logMessage += "\nTotal carb insulin: \(roundToHundredth(totalLargeMealInsulin))U"
     logMessage += "\nBG correction: \(roundToHundredth(targetDifferenceInsulin))U"
     logMessage += "\nTotal before IOB: \(roundToHundredth(totalWithBGCorrection))U"
-    logMessage += "\nIOB reduction: \(roundToHundredth(iobReduction))U" 
+    logMessage += "\nIOB reduction: \(roundToHundredth(iobReduction))U"
     logMessage += "\nLARGE MEAL BEFORE SAFETY: \(roundToHundredth(cappedLargeMealInsulin))U"
     
-    // Apply the same safety reductions as main calculation
+    // Apply safety reductions
     let safeLargeMealInsulin = applySafetyReductions(rawInsulin: cappedLargeMealInsulin, isLargeMeal: true)
     
     logMessage += "\nLARGE MEAL AFTER SAFETY: \(roundToHundredth(safeLargeMealInsulin))U"
     
     return safeLargeMealInsulin > 0 ? roundBolus(safeLargeMealInsulin) : 0
 }
+ 
 
         
         // YOUR REPLACEMENT: Enhanced calculateInsulin with logging and safety
