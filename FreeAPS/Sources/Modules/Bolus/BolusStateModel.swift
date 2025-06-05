@@ -98,6 +98,7 @@ extension Bolus {
         @Published var predictionBasedInsulin: Decimal = 0
         @Published var deltaReductionApplied: Bool = false
         @Published var predictionReductionApplied: Bool = false
+         @Published var mostRecentCarbEntryTime: Date = .distantPast
         
 
         //Your enhanced Large Meal settings
@@ -208,6 +209,17 @@ extension Bolus {
             return roundedValue
         }
 
+        // Custom Addition
+        func getEffectiveRecentCarbs() -> Decimal {
+            // Only consider manual carb entries less than 10 minutes old
+            if manualCarbEntry > 0 && Date().timeIntervalSince(mostRecentCarbEntryTime) < 600 {
+                return manualCarbEntry
+            }
+            // If no recent manual entry or it's too old, return 0
+            return 0
+        }
+
+        
         // EXTRACTED: Safety reduction logic that both main calculation and large meal can use
         func applySafetyReductions(rawInsulin: Decimal, isLargeMeal: Bool = false) -> Decimal {
             var deltaBasedInsulin = rawInsulin
