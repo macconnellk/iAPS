@@ -267,9 +267,8 @@ extension Bolus {
             return finalInsulin
         }
       
-        // FIXED: Tiered dosing approach (100% up to 65g + fraction thereafter)
-        
-// FIXED: Working carbsStorage integration that compiles and eliminates phantom entries
+        // Tiered dosing approach
+        // SIMPLIFIED: Try direct approach first - may work better
 func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     // Check if large meal mode is enabled
     guard enableLargeMealMode else { return 0 }
@@ -286,39 +285,39 @@ func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
         return 0
     }
     
-    // FIXED: Use DispatchGroup instead of semaphore for better compatibility
+    // SIMPLIFIED: Try synchronous approach first
     var savedEntries: [StoredCarbEntry] = []
-    var fetchError: Error?
+    var fetchCompleted = false
     
-    let dispatchGroup = DispatchGroup()
-    dispatchGroup.enter()
+    logMessage += "\n\nFetching recent carb entries from carbsStorage..."
     
-    // Use the injected carbsStorage from StateModel
     carbsStorage.getCarbEntries(start: startTime, end: currentTime) { result in
         switch result {
         case .success(let entries):
             savedEntries = entries
+            logMessage += "\nSuccessfully fetched \(entries.count) carb entries"
         case .failure(let error):
-            fetchError = error
+            logMessage += "\nFailed to fetch carb entries: \(error.localizedDescription)"
+            savedEntries = []
         }
-        dispatchGroup.leave()
+        fetchCompleted = true
     }
     
-    // Wait for completion with 10-second timeout
-    let timeoutResult = dispatchGroup.wait(timeout: .now() + 10.0)
+    // Simple polling wait (less complex than DispatchGroup)
+    let startWait = Date()
+    let maxWaitTime: TimeInterval = 10.0
     
-    if timeoutResult == .timedOut {
-        logMessage += "\n\nWARNING: Timeout fetching carb entries after 10 seconds - using current entry only"
-        logMessage += "\nThis may miss recent carb entries in large meal detection"
-        savedEntries = []
-        fetchError = NSError(domain: "CarbFetch", code: -1, userInfo: [NSLocalizedDescriptionKey: "Fetch timeout"])
-    } else if let error = fetchError {
-        logMessage += "\n\nERROR: Failed to fetch carb entries: \(error.localizedDescription)"
-        logMessage += "\nFalling back to current entry only - large meal detection may be incomplete"
+    while !fetchCompleted && Date().timeIntervalSince(startWait) < maxWaitTime {
+        Thread.sleep(forTimeInterval: 0.1) // Wait 100ms between checks
+    }
+    
+    if !fetchCompleted {
+        logMessage += "\n🔴 TIMEOUT: Could not fetch carb entries after 10 seconds"
+        logMessage += "\nUsing current entry only - large meal detection incomplete"
         savedEntries = []
     }
     
-    // SAFETY: Filter out entries that are too old or invalid
+    // Filter valid entries
     let validSavedEntries = savedEntries.filter { entry in
         let entryAge = currentTime.timeIntervalSince(entry.startDate)
         let isWithinWindow = entryAge >= 0 && entryAge <= timeWindowSeconds
@@ -326,105 +325,92 @@ func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
         return isWithinWindow && hasValidCarbs
     }
     
-    // Create current entry for calculation
+    // Create current entry
     let currentEntry = (carbs: Double(currentCarbs), date: currentTime)
     
-    // Combine all entries (saved + current)
+    // Combine all entries
     var allEntries: [(carbs: Double, date: Date)] = []
     allEntries.append(contentsOf: validSavedEntries.map { 
         (carbs: $0.quantity.doubleValue(for: .gram()), date: $0.startDate) 
     })
     allEntries.append(currentEntry)
     
-    // Sort by date (oldest first)
+    // Sort by date
     allEntries.sort { $0.date < $1.date }
     
     guard !allEntries.isEmpty else {
-        logMessage += "\n\nNo valid entries found for large meal calculation"
+        logMessage += "\n\nNo valid entries found"
         return 0
     }
     
-    // Use user-defined absorption rate
-    let min_hourly_carb_absorption = Decimal(carbAbsorptionRate)
-    let min_5m_carbabsorption = min_hourly_carb_absorption / (60 / 5)
-    
-    // Calculate active carbs using absorption model
-    var totalActiveCarbs: Decimal = 0
-    
-    logMessage += "\n\nLarge Meal Analysis:"
-    if fetchError != nil {
-        logMessage += "\n🔴 DATA WARNING: Using current entry only due to fetch failure"
+    // Report data status
+    if validSavedEntries.isEmpty && !fetchCompleted {
+        logMessage += "\n🔴 DATA WARNING: Using current entry only due to fetch timeout"
     } else if validSavedEntries.isEmpty {
         logMessage += "\n✅ DATA OK: No saved entries found (single meal)"
     } else {
         logMessage += "\n✅ DATA OK: Found \(validSavedEntries.count) saved + 1 current entry"
     }
+    
+    // Calculate active carbs
+    let min_hourly_carb_absorption = Decimal(carbAbsorptionRate)
+    let min_5m_carbabsorption = min_hourly_carb_absorption / (60 / 5)
+    var totalActiveCarbs: Decimal = 0
+    
+    logMessage += "\n\nLarge Meal Analysis:"
     logMessage += "\nTime window: \(Int(largeMealTimeWindow)) minutes"
-    logMessage += "\nUsing carb absorption: \(min_hourly_carb_absorption)g/hour (\(roundToHundredth(min_5m_carbabsorption))g per 5min)"
+    logMessage += "\nUsing absorption: \(min_hourly_carb_absorption)g/hour"
     
     for (index, entry) in allEntries.enumerated() {
-        let mealAge = currentTime.timeIntervalSince(entry.date) / 60 // minutes
+        let mealAge = currentTime.timeIntervalSince(entry.date) / 60
         let originalCarbs = Decimal(entry.carbs)
-        
-        // Calculate absorbed carbs using 5-minute absorption model
         let fiveMinutePeriods = Int(max(0, mealAge) / 5)
         let absorbedCarbs = Decimal(fiveMinutePeriods) * min_5m_carbabsorption
-        
-        // Calculate remaining active carbs
         let activeCarbs = max(0, originalCarbs - absorbedCarbs)
         totalActiveCarbs += activeCarbs
         
         let timeAgo = Int(max(0, mealAge))
         let entryType = (index == allEntries.count - 1) ? "CURRENT" : "SAVED"
-        logMessage += "\n\(entryType) Entry \(index + 1): \(originalCarbs)g (\(timeAgo)min ago) - \(roundToHundredth(absorbedCarbs))g absorbed = \(roundToHundredth(activeCarbs))g active"
+        logMessage += "\n\(entryType): \(originalCarbs)g (\(timeAgo)min ago) = \(roundToHundredth(activeCarbs))g active"
     }
     
-    let totalRawCarbs = allEntries.reduce(0) { $0 + Decimal($1.carbs) }
-    logMessage += "\nRAW total carbs: \(totalRawCarbs)g"
-    logMessage += "\nACTIVE total carbs: \(roundToHundredth(totalActiveCarbs))g"
+    logMessage += "\nTOTAL ACTIVE: \(roundToHundredth(totalActiveCarbs))g"
     
-    // Only apply correction if active carbs exceed user-defined threshold
+    // Check threshold
     guard totalActiveCarbs > largeMealThresholdDecimal else {
-        logMessage += "\nActive carbs \(roundToHundredth(totalActiveCarbs))g ≤ threshold \(largeMealThresholdDecimal)g - No large meal correction"
+        logMessage += "\nBelow threshold \(largeMealThresholdDecimal)g - No large meal correction"
         return 0
     }
     
-    // TIERED DOSING: 100% for first portion + user-defined fraction for additional carbs
+    // Tiered dosing
     let baseCarbs = min(totalActiveCarbs, largeMealThresholdDecimal)
     let additionalCarbs = max(0, totalActiveCarbs - largeMealThresholdDecimal)
-    
-    // Calculate insulin for each tier
     let baseInsulin = baseCarbs / carbRatio
     let additionalInsulin = (additionalCarbs / carbRatio) * Decimal(largeMealFraction)
     let totalLargeMealInsulin = baseInsulin + additionalInsulin
     
-    // Add BG correction to large meal calculation
+    // Add corrections
     let totalWithBGCorrection = totalLargeMealInsulin + targetDifferenceInsulin
-    
-    // Apply IOB as a reduction
     let iobReduction = iob > 0 ? iob : 0
     let largeMealBeforeSafety = max(0, totalWithBGCorrection - iobReduction)
-    
-    // Apply safety cap
     let safetyMaxInsulin: Decimal = min(6.0, maxBolus * 0.8)
     let cappedLargeMealInsulin = min(largeMealBeforeSafety, safetyMaxInsulin)
     
     logMessage += "\nLARGE MEAL CALCULATION:"
-    logMessage += "\nFirst \(roundToHundredth(baseCarbs))g at 100%: \(roundToHundredth(baseInsulin))U"
-    logMessage += "\nAdditional \(roundToHundredth(additionalCarbs))g at \(Int(largeMealFraction * 100))%: \(roundToHundredth(additionalInsulin))U"
+    logMessage += "\nBase \(roundToHundredth(baseCarbs))g@100%: \(roundToHundredth(baseInsulin))U"
+    logMessage += "\nExtra \(roundToHundredth(additionalCarbs))g@\(Int(largeMealFraction * 100))%: \(roundToHundredth(additionalInsulin))U"
     logMessage += "\nTotal carb insulin: \(roundToHundredth(totalLargeMealInsulin))U"
-    logMessage += "\nBG correction: \(roundToHundredth(targetDifferenceInsulin))U"
-    logMessage += "\nTotal before IOB: \(roundToHundredth(totalWithBGCorrection))U"
-    logMessage += "\nIOB reduction: \(roundToHundredth(iobReduction))U"
-    logMessage += "\nLARGE MEAL BEFORE SAFETY: \(roundToHundredth(cappedLargeMealInsulin))U"
+    logMessage += "\nWith BG correction: \(roundToHundredth(totalWithBGCorrection))U"
+    logMessage += "\nMinus IOB: \(roundToHundredth(cappedLargeMealInsulin))U"
     
     // Apply safety reductions
     let safeLargeMealInsulin = applySafetyReductions(rawInsulin: cappedLargeMealInsulin, isLargeMeal: true)
     
-    logMessage += "\nLARGE MEAL AFTER SAFETY: \(roundToHundredth(safeLargeMealInsulin))U"
+    logMessage += "\nFINAL LARGE MEAL: \(roundToHundredth(safeLargeMealInsulin))U"
     
     return safeLargeMealInsulin > 0 ? roundBolus(safeLargeMealInsulin) : 0
 }
+
  
 
         
