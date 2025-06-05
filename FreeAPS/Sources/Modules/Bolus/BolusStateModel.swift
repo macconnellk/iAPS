@@ -268,29 +268,9 @@ extension Bolus {
         }
       
         // Tiered dosing approach
-        func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
-    // Test 1: Basic guard
-    guard enableLargeMealMode else { 
-        return 0 
-    }
-    
-    // Test 2: Can we access meal?
-    guard let mealCarbs = meal?.first?.carbs else {
-        logMessage += "\nNo meal found"
-        return 0
-    }
-    
-    // Test 3: Can we access carbsStorage?
-    logMessage += "\nTesting carbsStorage access..."
-    
-    // THIS IS THE CRITICAL TEST - does carbsStorage exist and what type is it?
-    carbsStorage.getCarbEntries(start: Date(), end: Date()) { result in
-        // Empty callback for now
-    }
-    
-    logMessage += "\nCarbsStorage call successful"
-    
-    // For now, just return 0 - we're testing compilation
+       // SAFE STUB: This should definitely compile
+func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
+    logMessage += "\n\nLarge meal detection temporarily disabled for testing"
     return 0
 }
 
