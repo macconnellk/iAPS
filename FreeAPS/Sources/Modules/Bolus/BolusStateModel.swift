@@ -284,6 +284,7 @@ extension Bolus {
       
         // Tiered dosing approach
        // SIMPLE APPROACH: Use existing working patterns from your StateModel
+// SIMPLE APPROACH: Use existing working patterns from your StateModel
 func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     guard enableLargeMealMode else { 
         logMessage += "\n\nLarge meal mode disabled"
@@ -298,21 +299,28 @@ func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     
     logMessage += "\n\nLarge meal detection using simplified historical approach..."
     
-    // Use existing recentCarbs pattern (we know this works)
+    // DEBUG: Let's see exactly what each source is returning
     let existingRecentCarbs = recentCarbs
     
-    // Look at carbToStore for additional recent entries
+    logMessage += "\nDEBUG VALUES:"
+    logMessage += "\ncurrentCarbs (from getEffectiveRecentCarbs): \(currentCarbs)g"
+    logMessage += "\nexistingRecentCarbs (from recentCarbs property): \(existingRecentCarbs)g"
+    logMessage += "\nmanualCarbEntry: \(manualCarbEntry)g"
+    logMessage += "\nmeal?.first?.carbs: \(meal?.first?.carbs ?? 0)g"
+    
     let currentTime = Date()
     let timeWindow = largeMealTimeWindow * 60 // seconds
     
     var totalRecentCarbs = currentCarbs
     var entryCount = 1
     
-    // Add recent carbs if they exist and are within time window
-    if existingRecentCarbs > 0 {
+    // Add recent carbs if they exist and are NOT the same as current carbs (avoid double counting)
+    if existingRecentCarbs > 0 && existingRecentCarbs != currentCarbs {
         totalRecentCarbs += existingRecentCarbs
         entryCount += 1
-        logMessage += "\nFound recent carbs: \(existingRecentCarbs)g"
+        logMessage += "\nAdded different recent carbs: \(existingRecentCarbs)g"
+    } else if existingRecentCarbs > 0 {
+        logMessage += "\nSkipped recent carbs (same as current): \(existingRecentCarbs)g"
     }
     
     // Check carbToStore for any other entries in the timeframe
@@ -347,11 +355,36 @@ func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
         return 0
     }
     
-    // PHANTOM CHECK: If COB is 0 but we calculated significant active carbs, be conservative
-    if cob == 0 && activeCarbs > currentCarbs * Decimal(1.5) {
-        logMessage += "\n⚠️ WARNING: COB=0 but high active carbs detected - possible phantom entries"
-        logMessage += "\nUsing conservative current-entry-only calculation"
-        return 0
+    // ENHANCED PHANTOM CHECK: If COB is 0 but we found multiple entries, likely phantom
+    if cob == 0 && entryCount > 1 {
+        logMessage += "\n🚨 PHANTOM ENTRY DETECTED: COB=0 but \(entryCount) entries found"
+        logMessage += "\nThis indicates canceled/deleted carb entries still appearing"
+        logMessage += "\nUsing CURRENT ENTRY ONLY to prevent over-dosing"
+        
+        // Recalculate with just current entry
+        let currentOnlyActiveCarbs = currentCarbs * Decimal(0.9) // slight absorption
+        if currentOnlyActiveCarbs > Decimal(largeMealThreshold) {
+            logMessage += "\nCurrent entry alone (\(currentCarbs)g) triggers large meal"
+            // Continue with current entry only calculation...
+            let largeMealThresholdDecimal = Decimal(largeMealThreshold)
+            let baseCarbs = min(currentOnlyActiveCarbs, largeMealThresholdDecimal)
+            let excessCarbs = max(0, currentOnlyActiveCarbs - largeMealThresholdDecimal)
+            
+            let baseInsulin = baseCarbs / carbRatio
+            let excessInsulin = (excessCarbs / carbRatio) * Decimal(largeMealFraction)
+            let totalCarbInsulin = baseInsulin + excessInsulin
+            let withCorrection = totalCarbInsulin + targetDifferenceInsulin
+            let afterIOB = max(0, withCorrection - max(0, iob))
+            let maxSafeInsulin = min(Decimal(6.0), maxBolus * Decimal(0.8))
+            let cappedInsulin = min(afterIOB, maxSafeInsulin)
+            
+            let finalInsulin = applySafetyReductions(rawInsulin: cappedInsulin, isLargeMeal: true)
+            logMessage += "\nPhantom-safe large meal insulin: \(roundToHundredth(finalInsulin))U"
+            return finalInsulin > 0 ? roundBolus(finalInsulin) : 0
+        } else {
+            logMessage += "\nCurrent entry alone below threshold - no large meal adjustment"
+            return 0
+        }
     }
     
     logMessage += "\n🔥 LARGE MEAL DETECTED"
