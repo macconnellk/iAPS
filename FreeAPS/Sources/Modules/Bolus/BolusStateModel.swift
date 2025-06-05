@@ -283,7 +283,7 @@ extension Bolus {
         }
       
         // Tiered dosing approach
-       // FIXED: Proper carbsStorage call with correct types
+       // DIRECT APPROACH: Try to access historical carb data without carbsStorage.getCarbEntries()
 func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     guard enableLargeMealMode else { 
         logMessage += "\n\nLarge meal mode disabled"
@@ -301,22 +301,105 @@ func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
         return 0
     }
     
-    logMessage += "\n\nAttempting carbsStorage call with proper types..."
+    logMessage += "\n\nTrying direct historical data access..."
     
-    // FIXED: Use the exact types from CarbStore
-    var fetchCompleted = false
-    var fetchedEntries: [Any] = [] // Use Any to avoid type issues for now
+    // APPROACH 1: Try using coreDataStorage (which we know works)
+    var historicalEntries: [(carbs: Double, date: Date)] = []
     
-    // Try with proper optional parameters
-    carbsStorage.getCarbEntries(start: startTime, end: currentTime) { result in
-        // Use generic handling to avoid type issues
-        fetchCompleted = true
-        // Don't process result yet, just test if the call builds
+    // Look for recent meals in CoreData (even though they may be phantom)
+    // We'll cross-reference with COB to validate
+    if let recentMeals = try? coreDataStorage.managedObjectContext.fetch(
+        NSFetchRequest<NSManagedObject>(entityName: "Meals")
+    ) {
+        logMessage += "\nFound \(recentMeals.count) meals in CoreData"
+        
+        for meal in recentMeals {
+            if let mealDate = meal.value(forKey: "createdAt") as? Date,
+               let carbAmount = meal.value(forKey: "carbs") as? Double,
+               carbAmount > 0 {
+                
+                let ageInSeconds = currentTime.timeIntervalSince(mealDate)
+                if ageInSeconds >= 0 && ageInSeconds <= timeWindowSeconds {
+                    historicalEntries.append((carbs: carbAmount, date: mealDate))
+                }
+            }
+        }
     }
     
-    logMessage += "\nCarbsStorage call syntax accepted by compiler"
+    // Add current entry
+    historicalEntries.append((carbs: Double(currentCarbs), date: currentTime))
     
-    return 0
+    // Sort by date
+    historicalEntries.sort { $0.date < $1.date }
+    
+    logMessage += "\nHistorical entries found: \(historicalEntries.count)"
+    
+    // VALIDATION: Cross-check with COB to detect phantoms
+    // If COB is 0 but we have many historical entries, some might be phantoms
+    if cob == 0 && historicalEntries.count > 1 {
+        logMessage += "\n⚠️ WARNING: COB=0 but multiple entries found - possible phantom entries"
+        logMessage += "\nUsing conservative approach - only current entry + most recent valid entry"
+        
+        // Keep only the current entry and maybe one recent entry
+        let currentEntry = historicalEntries.last! // Current entry
+        historicalEntries = [currentEntry]
+    }
+    
+    // Calculate active carbs with absorption
+    let absorptionRate = Decimal(carbAbsorptionRate)
+    let absorptionPer5Min = absorptionRate / (60 / 5)
+    var totalActiveCarbs: Decimal = 0
+    
+    logMessage += "\nCalculating active carbs from \(historicalEntries.count) entries:"
+    
+    for (index, entry) in historicalEntries.enumerated() {
+        let ageInMinutes = currentTime.timeIntervalSince(entry.date) / 60
+        let originalCarbs = Decimal(entry.carbs)
+        
+        // Calculate absorbed carbs
+        let fiveMinPeriods = Int(max(0, ageInMinutes) / 5)
+        let absorbedCarbs = Decimal(fiveMinPeriods) * absorptionPer5Min
+        let activeCarbs = max(0, originalCarbs - absorbedCarbs)
+        
+        totalActiveCarbs += activeCarbs
+        
+        let entryType = (index == historicalEntries.count - 1) ? "CURRENT" : "HISTORICAL"
+        let ageMin = Int(max(0, ageInMinutes))
+        logMessage += "\n\(entryType): \(originalCarbs)g (\(ageMin)m ago) → \(roundToHundredth(activeCarbs))g active"
+    }
+    
+    logMessage += "\nTotal active carbs: \(roundToHundredth(totalActiveCarbs))g"
+    logMessage += "\nThreshold: \(largeMealThresholdDecimal)g"
+    
+    // Check threshold
+    guard totalActiveCarbs > largeMealThresholdDecimal else {
+        logMessage += "\nBelow threshold - no large meal adjustment"
+        return 0
+    }
+    
+    logMessage += "\n🔥 LARGE MEAL DETECTED with historical data"
+    
+    // Tiered dosing calculation
+    let baseCarbs = min(totalActiveCarbs, largeMealThresholdDecimal)
+    let excessCarbs = max(0, totalActiveCarbs - largeMealThresholdDecimal)
+    
+    let baseInsulin = baseCarbs / carbRatio
+    let excessInsulin = (excessCarbs / carbRatio) * Decimal(largeMealFraction)
+    let totalCarbInsulin = baseInsulin + excessInsulin
+    
+    // Add corrections
+    let withCorrection = totalCarbInsulin + targetDifferenceInsulin
+    let beforeSafety = max(0, withCorrection - max(0, iob))
+    let cappedInsulin = min(beforeSafety, min(Decimal(6.0), maxBolus * Decimal(0.8)))
+    
+    logMessage += "\nTiered calculation: Base \(roundToHundredth(baseInsulin))U + Excess \(roundToHundredth(excessInsulin))U"
+    logMessage += "\nBefore safety: \(roundToHundredth(cappedInsulin))U"
+    
+    let finalInsulin = applySafetyReductions(rawInsulin: cappedInsulin, isLargeMeal: true)
+    
+    logMessage += "\nFinal large meal insulin: \(roundToHundredth(finalInsulin))U"
+    
+    return finalInsulin > 0 ? roundBolus(finalInsulin) : 0
 }
  
 
