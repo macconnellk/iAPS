@@ -268,8 +268,8 @@ extension Bolus {
         }
       
         // FIXED: Tiered dosing approach (100% up to 65g + fraction thereafter)
-        // UPDATED: Multiple carb entries with 60-minute window and carb absorption modeling
-        // FIXED: Safe carbsStorage integration to eliminate phantom entries
+        
+// FIXED: Working carbsStorage integration that compiles and eliminates phantom entries
 func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     // Check if large meal mode is enabled
     guard enableLargeMealMode else { return 0 }
@@ -280,62 +280,53 @@ func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     let startTime = currentTime.addingTimeInterval(-timeWindowSeconds)
     
     // Get current entry being calculated
-    let currentCarbs = meal.first?.carbs ?? 0
+    let currentCarbs = meal?.first?.carbs ?? 0
     guard currentCarbs > 0 else {
         logMessage += "\n\nNo current carb entry for large meal detection"
         return 0
     }
     
-    // FIXED: Use async/await pattern to safely get carb entries
+    // FIXED: Use DispatchGroup instead of semaphore for better compatibility
     var savedEntries: [StoredCarbEntry] = []
     var fetchError: Error?
     
-    // Create a semaphore for synchronous waiting
-    let semaphore = DispatchSemaphore(value: 0)
+    let dispatchGroup = DispatchGroup()
+    dispatchGroup.enter()
     
     // Use the injected carbsStorage from StateModel
     carbsStorage.getCarbEntries(start: startTime, end: currentTime) { result in
-        defer { semaphore.signal() }
-        
         switch result {
         case .success(let entries):
             savedEntries = entries
-            fetchError = nil
         case .failure(let error):
             fetchError = error
-            savedEntries = []
         }
+        dispatchGroup.leave()
     }
     
-    // Wait for completion with timeout
-    let timeoutResult = semaphore.wait(timeout: .now() + 2.0)
+    // Wait for completion with 10-second timeout
+    let timeoutResult = dispatchGroup.wait(timeout: .now() + 10.0)
     
     if timeoutResult == .timedOut {
-        logMessage += "\n\nTimeout fetching carb entries - using current entry only"
+        logMessage += "\n\nWARNING: Timeout fetching carb entries after 10 seconds - using current entry only"
+        logMessage += "\nThis may miss recent carb entries in large meal detection"
         savedEntries = []
+        fetchError = NSError(domain: "CarbFetch", code: -1, userInfo: [NSLocalizedDescriptionKey: "Fetch timeout"])
     } else if let error = fetchError {
-        logMessage += "\n\nError fetching carb entries: \(error.localizedDescription) - using current entry only"
+        logMessage += "\n\nERROR: Failed to fetch carb entries: \(error.localizedDescription)"
+        logMessage += "\nFalling back to current entry only - large meal detection may be incomplete"
         savedEntries = []
     }
     
-    // SAFETY: Always filter out entries that are too old or invalid
+    // SAFETY: Filter out entries that are too old or invalid
     let validSavedEntries = savedEntries.filter { entry in
-        // Only include entries within our time window
         let entryAge = currentTime.timeIntervalSince(entry.startDate)
         let isWithinWindow = entryAge >= 0 && entryAge <= timeWindowSeconds
-        
-        // Only include entries with positive carbs
         let hasValidCarbs = entry.quantity.doubleValue(for: .gram()) > 0
-        
         return isWithinWindow && hasValidCarbs
     }
     
-    // Create current entry for calculation (only if it has carbs)
-    guard currentCarbs > 0 else {
-        logMessage += "\n\nNo current carbs to calculate"
-        return 0
-    }
-    
+    // Create current entry for calculation
     let currentEntry = (carbs: Double(currentCarbs), date: currentTime)
     
     // Combine all entries (saved + current)
@@ -348,7 +339,7 @@ func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     // Sort by date (oldest first)
     allEntries.sort { $0.date < $1.date }
     
-    guard allEntries.count > 0 else {
+    guard !allEntries.isEmpty else {
         logMessage += "\n\nNo valid entries found for large meal calculation"
         return 0
     }
@@ -361,7 +352,14 @@ func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     var totalActiveCarbs: Decimal = 0
     
     logMessage += "\n\nLarge Meal Analysis:"
-    logMessage += "\nSaved entries: \(validSavedEntries.count), Current: 1"
+    if fetchError != nil {
+        logMessage += "\n🔴 DATA WARNING: Using current entry only due to fetch failure"
+    } else if validSavedEntries.isEmpty {
+        logMessage += "\n✅ DATA OK: No saved entries found (single meal)"
+    } else {
+        logMessage += "\n✅ DATA OK: Found \(validSavedEntries.count) saved + 1 current entry"
+    }
+    logMessage += "\nTime window: \(Int(largeMealTimeWindow)) minutes"
     logMessage += "\nUsing carb absorption: \(min_hourly_carb_absorption)g/hour (\(roundToHundredth(min_5m_carbabsorption))g per 5min)"
     
     for (index, entry) in allEntries.enumerated() {
