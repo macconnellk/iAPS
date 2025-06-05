@@ -184,6 +184,61 @@ extension Bolus {
             setupInsulinRequired()
         }
 
+
+        func debugDataSources() {
+    let currentTime = Date()
+    let timeWindowSeconds = largeMealTimeWindow * 60
+    
+    // Get data from CoreDataStorage (current approach)
+    let coreDataMeals = coreDataStorage.fetchRecentMeals(within: timeWindowSeconds)
+    
+    // Get data from CarbsStorage (History screen approach)
+    let carbsEntries = carbsStorage.recent()
+    let cutoffTime = currentTime.addingTimeInterval(-timeWindowSeconds)
+    let recentCarbsEntries = carbsEntries.filter { entry in
+        let entryDate = entry.actualDate ?? entry.createdAt ?? Date.distantPast
+        return entryDate > cutoffTime && entry.carbs > 0 && !(entry.isFPU ?? false)
+    }
+    
+    logMessage += "\n\n=== DATA SOURCE COMPARISON ==="
+    logMessage += "\nCoreDataStorage (current): \(coreDataMeals.count) meals"
+    logMessage += "\nCarbsStorage (history): \(recentCarbsEntries.count) entries"
+    
+    // Log CoreDataStorage meals
+    logMessage += "\n\nCoreDataStorage meals:"
+    for (index, meal) in coreDataMeals.enumerated() {
+        let ageMinutes = Int(currentTime.timeIntervalSince(meal.createdAt ?? Date()) / 60)
+        logMessage += "\n  \(index + 1): \(meal.carbs)g (\(ageMinutes)min ago)"
+        if let id = meal.id {
+            logMessage += " ID: \(id.prefix(8))"
+        }
+    }
+    
+    // Log CarbsStorage entries
+    logMessage += "\n\nCarbsStorage entries:"
+    for (index, entry) in recentCarbsEntries.enumerated() {
+        let entryDate = entry.actualDate ?? entry.createdAt ?? currentTime
+        let ageMinutes = Int(currentTime.timeIntervalSince(entryDate) / 60)
+        logMessage += "\n  \(index + 1): \(entry.carbs)g (\(ageMinutes)min ago)"
+        if let id = entry.id {
+            logMessage += " ID: \(id.prefix(8))"
+        }
+    }
+    
+    // Check current carbToStore
+    logMessage += "\n\nCurrent carbToStore:"
+    if let currentCarb = carbToStore.first {
+        logMessage += "\n  Current: \(currentCarb.carbs)g"
+        if let id = currentCarb.id {
+            logMessage += " ID: \(id.prefix(8))"
+        }
+    } else {
+        logMessage += "\n  No current carbs"
+    }
+    
+    logMessage += "\n========================\n"
+}
+        
         func getDeltaBG() {
             let glucose = provider.fetchGlucose()
             guard let lastGlucose = glucose.first, glucose.count >= 4 else { return }
@@ -280,49 +335,24 @@ extension Bolus {
         }
       
         // Updated checkForMultipleCarbEntries function:
-        // CONSERVATIVE FIX: Change only the data source, keep everything else the same
-// Replace the checkForMultipleCarbEntries method in Bolus.StateModel
-
 func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     // Check if large meal mode is enabled
     guard enableLargeMealMode else { return 0 }
+
+    // ADD THIS LINE for debugging
+    debugDataSources()
     
     let currentTime = Date()
     let largeMealThresholdDecimal = Decimal(largeMealThreshold)
     
-    // CHANGE: Get carbs from CarbsStorage instead of CoreDataStorage
+    // Get all meals within user-defined time window
     let timeWindowSeconds = largeMealTimeWindow * 60
-    let cutoffTime = currentTime.addingTimeInterval(-timeWindowSeconds)
+    let recentMeals = coreDataStorage.fetchRecentMeals(within: timeWindowSeconds)
     
-    // Get all carb entries from CarbsStorage (same source as History screen)
-    let allCarbEntries = carbsStorage.recent()
-    
-    // Filter to recent entries (same logic as before, just different data source)
-    let recentCarbEntries = allCarbEntries.filter { entry in
-        let entryDate = entry.actualDate ?? entry.createdAt ?? Date.distantPast
-        return entryDate > cutoffTime && entry.carbs > 0 && !(entry.isFPU ?? false)
-    }
-    
-    guard !recentCarbEntries.isEmpty else {
-        logMessage += "\n\nNo recent carb entries found for multiple entry correction"
+    guard !recentMeals.isEmpty else {
+        logMessage += "\n\nNo recent meals found for multiple entry correction"
         return 0
     }
-    
-    // Convert CarbsEntry objects to a format compatible with original logic
-    // Create lightweight wrapper objects that match the original Meals interface
-    struct MealWrapper {
-        let carbs: Double
-        let createdAt: Date?
-        
-        init(from entry: CarbsEntry) {
-            self.carbs = Double(entry.carbs)
-            self.createdAt = entry.actualDate ?? entry.createdAt
-        }
-    }
-    
-    let recentMeals = recentCarbEntries.map { MealWrapper(from: $0) }
-    
-    // Everything below here is IDENTICAL to original code, just using recentMeals
     
     // Use user-defined absorption rate
     var min_hourly_carb_absorption = Decimal(carbAbsorptionRate)
@@ -399,7 +429,6 @@ func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     
     return safeLargeMealInsulin > 0 ? roundBolus(safeLargeMealInsulin) : 0
 }
-
 
         
         // YOUR REPLACEMENT: Enhanced calculateInsulin with logging and safety
