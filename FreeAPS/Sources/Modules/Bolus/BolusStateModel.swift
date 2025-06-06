@@ -313,7 +313,7 @@ extension Bolus {
         // checkForMultipleCarbEntries method
         
 
-unc checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
+    func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     // Check if large meal mode is enabled
     guard enableLargeMealMode else { return 0 }
     
