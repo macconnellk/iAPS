@@ -287,6 +287,10 @@ extension Bolus {
     // Check if large meal mode is enabled
     guard enableLargeMealMode else { return 0 }
     
+    // Add this one line to checkForMultipleCarbEntries for testing
+        let providerCarbs = provider.carbs()
+        logMessage += "\nProvider carbs available: \(providerCarbs.count)"
+        
     let currentTime = Date()
     let largeMealThresholdDecimal = Decimal(largeMealThreshold)
     
