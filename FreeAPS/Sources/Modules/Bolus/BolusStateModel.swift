@@ -98,7 +98,8 @@ extension Bolus {
         @Published var predictionBasedInsulin: Decimal = 0
         @Published var deltaReductionApplied: Bool = false
         @Published var predictionReductionApplied: Bool = false
-         @Published var mostRecentCarbEntryTime: Date = .distantPast
+        @Published var mostRecentCarbEntryTime: Date = .distantPast
+        @Published var historicalCarbs: [CarbsEntry] = []
         
 
         //Your enhanced Large Meal settings
@@ -157,6 +158,9 @@ extension Bolus {
             closedLoop = settings.settings.closedLoop
             loopDate = apsManager.lastLoopDate
 
+            //Load historical carbs data like DataTable does
+            loadHistoricalCarbs()
+
             if waitForSuggestionInitial {
                 if waitForCarbs {
                     setupBolusData()
@@ -183,6 +187,32 @@ extension Bolus {
             }
             setupInsulinRequired()
         }
+
+        private func loadHistoricalCarbs() {
+            // Use same async pattern as DataTable
+            let processQueue = DispatchQueue(label: "loadHistoricalCarbs.processQueue")
+    
+            processQueue.async {
+                do {
+                    // Load carbs data (same call as DataTable)
+                    let carbs = self.carbsStorage.recent()
+                        .filter { !($0.isFPU ?? false) } // Same filter as DataTable
+            
+                    // Update on main thread
+                    DispatchQueue.main.async {
+                        self.historicalCarbs = carbs
+                        print("Loaded \(carbs.count) historical carbs at startup")
+                    }
+                } catch {
+                    DispatchQueue.main.async {
+                        print("Error loading historical carbs: \(error)")
+                        self.historicalCarbs = []
+                    }
+                }
+           }
+        }
+
+        
         
         func getDeltaBG() {
             let glucose = provider.fetchGlucose()
@@ -280,19 +310,36 @@ extension Bolus {
         }
       
 
-        // REVERT: Put back the original checkForMultipleCarbEntries method
-// This should restore functionality so we can debug properly
+        // checkForMultipleCarbEntries method
+        
 
-func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
+unc checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     // Check if large meal mode is enabled
     guard enableLargeMealMode else { return 0 }
     
     let currentTime = Date()
     let largeMealThresholdDecimal = Decimal(largeMealThreshold)
     
-    // Get all meals within user-defined time window
+    // USE CACHED HISTORICAL CARBS instead of trying to access storage
     let timeWindowSeconds = largeMealTimeWindow * 60
-    let recentMeals = coreDataStorage.fetchRecentMeals(within: timeWindowSeconds)
+    let cutoffTime = currentTime.addingTimeInterval(-timeWindowSeconds)
+    
+    // Filter cached carbs to recent time window
+    let recentHistoricalCarbs = historicalCarbs.filter { entry in
+        let entryDate = entry.actualDate ?? entry.createdAt ?? Date.distantPast
+        return entryDate > cutoffTime && entry.carbs > 0
+    }
+    
+    // ALSO get CoreDataStorage for comparison/debugging
+    let coreDataMeals = coreDataStorage.fetchRecentMeals(within: timeWindowSeconds)
+    
+    // DEBUG: Show both data sources
+    logMessage += "\n\n=== DATA SOURCE COMPARISON ==="
+    logMessage += "\nCoreDataStorage: \(coreDataMeals.count) meals"
+    logMessage += "\nHistorical carbs (cached): \(recentHistoricalCarbs.count) entries"
+    
+    // For now, continue using CoreDataStorage but show the comparison
+    let recentMeals = coreDataMeals
     
     guard !recentMeals.isEmpty else {
         logMessage += "\n\nNo recent meals found for multiple entry correction"
