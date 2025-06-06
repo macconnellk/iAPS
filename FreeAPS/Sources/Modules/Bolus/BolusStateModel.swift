@@ -281,28 +281,12 @@ extension Bolus {
       
 
         // REVERT: Put back the original checkForMultipleCarbEntries method
-        // This should restore functionality so we can debug properly
+// This should restore functionality so we can debug properly
 
-    func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
+func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     // Check if large meal mode is enabled
     guard enableLargeMealMode else { return 0 }
     
-    // REPLACE WITH THIS (async, safe):
-        DispatchQueue.global().async {
-            do {
-                let carbs = self.provider.carbs()
-                DispatchQueue.main.async {
-                    self.logMessage += "\n[ASYNC] Provider carbs: \(carbs.count)"
-                    // Force a UI update to see the log
-                    self.viewlogMessage = self.logMessage
-                }
-            } catch {
-                DispatchQueue.main.async {
-                    self.logMessage += "\n[ASYNC] Provider error: \(error)"
-                }
-            }
-        }
-        
     let currentTime = Date()
     let largeMealThresholdDecimal = Decimal(largeMealThreshold)
     
