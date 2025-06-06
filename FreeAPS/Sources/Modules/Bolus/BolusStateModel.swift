@@ -584,87 +584,59 @@ return safeLargeMealInsulin > 0 ? roundBolus(safeLargeMealInsulin) : 0
 
             // YOUR ADDITION: Now calculate insulin for the latest full carb entry if within last ten minutes
             if effectiveCarbs > 0 {
-                // Calculate insulin for latest carb entry
-                latestCarbEntryInsulin = (effectiveCarbs / carbRatio)
-                wholeCalc_carbs = latestCarbEntryInsulin + targetDifferenceInsulin
-                log_manualCarbEntry_used = effectiveCarbs
+    // STAGE 2: Use tiered dosing function for single meals
+    logMessage = "=== SINGLE MEAL CALCULATION ===\n"
+    logMessage += "Current carbs: \(effectiveCarbs)g\n"
+    
+    // Use tiered function instead of simple division
+    let tieredResult = calculateTieredInsulin(
+        totalCarbs: effectiveCarbs,
+        includeCorrections: true,
+        logPrefix: ""
+    )
+    
+    // Set wholeCalc to the tiered result
+    wholeCalc = tieredResult
+    
+    // Update tracking variables for consistency
+    latestCarbEntryInsulin = effectiveCarbs / carbRatio  // Basic carb insulin for tracking
+    wholeCalc_carbs = tieredResult
+    log_manualCarbEntry_used = effectiveCarbs
+    log_COBapproach = effectiveCarbs > Decimal(largeMealThreshold) ? "Tiered Dosing" : "Standard Dosing"
+    
+    // Format values for logging
+    roundedLatestCarbEntryInsulin = roundToHundredth(latestCarbEntryInsulin)
+    roundedwholeCalc_carbs = roundToHundredth(wholeCalc_carbs)
+    log_roundedWholeCalc = roundToHundredth(wholeCalc)
+    
+    logMessage += "\nApproach: \(log_COBapproach)\n"
+    logMessage += "Final single meal insulin: \(log_roundedWholeCalc)U\n"
+} else {
+    // Decision Path at top
+    logMessage = "No New Carbs. Recommendation Disabled, would be\n"
 
-                // Calculate final values with clear explanation of which was chosen
-                let originalWholeCalc = wholeCalc
-                wholeCalc = min(wholeCalc, wholeCalc_carbs)
+    if targetDifferenceInsulin > 0 {
+        logMessage += "Correction: \(log_roundedtargetDifferenceInsulin)U\n"
+        logMessage += "IOB: \(log_roundediobInsulinReduction)U\n"
+    } else {
+        logMessage += "No correction needed (BG at/below target)\n"
+        logMessage += "IOB: \(log_roundediobInsulinReduction)U\n"
+    }
 
-                // Log the approach
-                if wholeCalc == wholeCalc_carbs {
-                logMessage = "Using Small Carb Approach:\n"
-                log_COBapproach = "Small Meal Carb Entry"    
-                }
+    logMessage += "Total Insulin: \(log_roundedWholeCalc)U\n"
+    wholeCalc = 0
 
-                // Format updated values for logging with proper precision
-                roundedLatestCarbEntryInsulin = roundToHundredth(latestCarbEntryInsulin)
-                roundedwholeCalc_carbs = roundToHundredth(wholeCalc_carbs)
-                log_roundedWholeCalc = roundToHundredth(wholeCalc)
+    // Add detailed calculations
+    logMessage += "\nDetailed Calculations:\n"
+    if targetDifferenceInsulin > 0 {
+    logMessage += "BG correction: \(log_roundedtargetDifferenceInsulin)U"
+        logMessage += " (BG: \(currentBG) - \(target)) ÷ ISF \(isf)\n"
+    } else {
+        logMessage += "BG correction: 0U (BG at or below target)\n"
+    }
 
-                // YOUR DETAILED LOGGING
-                logMessage += "Carbs: \(log_manualCarbEntry_used)g, Insulin: \(roundedLatestCarbEntryInsulin)g\n"
-            if log_COBapproach == "COB Value" {
-                logMessage += "COB: \(cob)g, Insulin: \(log_roundedwholeCobInsulin)g\n"
-            } else {
-                logMessage += "Large Meal Fraction: \(log_manualCarbEntry_used)g, Insulin: \(log_roundedwholeCobInsulin)g\n"
-            }
-                logMessage += "Insulin Determined By: \(log_COBapproach)\n"
-                logMessage += "Correction: \(log_roundedtargetDifferenceInsulin)U\n"
-                logMessage += "IOB: \(log_roundediobInsulinReduction)U\n"
-                logMessage += "Total Insulin: \(log_roundedWholeCalc)U\n"
-
-                logMessage += "\nDetailed Calculations:\n"
-                // Carb calculation component
-                logMessage += "Carb insulin: \(roundedLatestCarbEntryInsulin)U"
-                logMessage += " (\(log_manualCarbEntry_used)g ÷ \(carbRatio))\n"
-                // COB calculation component selected larger of COB insulin or Large Meal insulin
-            if log_COBapproach == "COB Value" {
-                logMessage += "COB: \(log_roundedwholeCobInsulin)U"
-                logMessage += " (\(cob)g ÷ \(carbRatio))\n"
-            } else {
-                logMessage += "Large Meal Fraction insulin: \(log_roundedwholeCobInsulin)U"
-                logMessage += " (\(log_manualCarbEntry_used)g ÷ \(carbRatio) * \(fraction))\n"
-            }
-
-                // BG correction component with comprehensive explanation
-                if targetDifferenceInsulin > 0 {
-                    logMessage += "BG correction: \(log_roundedtargetDifferenceInsulin)U"
-                    logMessage += " (BG: \(currentBG) - \(target)) ÷ ISF \(isf)\n"
-                } else {
-                    logMessage += "BG correction: 0U (BG at or below target)\n"
-                }
-
-                // IOB component
-                logMessage += "IOB adjustment: \(log_roundediobInsulinReduction)U\n"
-            } else {
-                // Decision Path at top
-                logMessage = "No New Carbs. Recommendation Disabled, would be\n"
-
-                if targetDifferenceInsulin > 0 {
-                    logMessage += "Correction: \(log_roundedtargetDifferenceInsulin)U\n"
-                    logMessage += "IOB: \(log_roundediobInsulinReduction)U\n"
-                } else {
-                    logMessage += "No correction needed (BG at/below target)\n"
-                    logMessage += "IOB: \(log_roundediobInsulinReduction)U\n"
-                }
-
-                logMessage += "Total Insulin: \(log_roundedWholeCalc)U\n"
-                wholeCalc = 0
-
-                // Add detailed calculations
-                logMessage += "\nDetailed Calculations:\n"
-                if targetDifferenceInsulin > 0 {
-                logMessage += "BG correction: \(log_roundedtargetDifferenceInsulin)U"
-                    logMessage += " (BG: \(currentBG) - \(target)) ÷ ISF \(isf)\n"
-                } else {
-                    logMessage += "BG correction: 0U (BG at or below target)\n"
-                }
-
-                logMessage += "IOB adjustment: \(log_roundediobInsulinReduction)U\n"
-            }
+    logMessage += "IOB adjustment: \(log_roundediobInsulinReduction)U\n"
+}
 
             // Rounding calculations
             roundedWholeCalc = roundToHundredth(wholeCalc)
