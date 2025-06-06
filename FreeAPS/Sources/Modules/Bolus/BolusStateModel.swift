@@ -211,7 +211,72 @@ extension Bolus {
            }
         }
 
+        // STAGE 1: Add this function to your StateModel but DON'T CALL IT YET
+    // This is just testing that the function itself compiles correctly
+
+    func calculateTieredInsulin(totalCarbs: Decimal, includeCorrections: Bool = true, logPrefix: String = "") -> Decimal {
+    guard totalCarbs > 0 else { return 0 }
+    
+    let largeMealThresholdDecimal = Decimal(largeMealThreshold)
+    
+    // Determine if tiered dosing applies
+    let useTieredDosing = totalCarbs > largeMealThresholdDecimal
+    
+    var carbInsulin: Decimal = 0
+    
+    if useTieredDosing {
+        // TIERED DOSING: 100% for first portion + fraction for additional
+        let baseCarbs = min(totalCarbs, largeMealThresholdDecimal)  // First portion at threshold
+        let additionalCarbs = max(0, totalCarbs - largeMealThresholdDecimal)  // Above threshold
         
+        let baseInsulin = baseCarbs / carbRatio  // 100% dosing for first portion
+        let additionalInsulin = (additionalCarbs / carbRatio) * Decimal(largeMealFraction)  // Fraction for excess
+        carbInsulin = baseInsulin + additionalInsulin
+        
+        logMessage += "\n\(logPrefix)TIERED DOSING APPLIED:"
+        logMessage += "\n\(logPrefix)• Total carbs: \(roundToHundredth(totalCarbs))g"
+        logMessage += "\n\(logPrefix)• First \(roundToHundredth(baseCarbs))g at 100%: \(roundToHundredth(baseInsulin))U"
+        logMessage += "\n\(logPrefix)• Additional \(roundToHundredth(additionalCarbs))g at \(Int(largeMealFraction * 100))%: \(roundToHundredth(additionalInsulin))U"
+        logMessage += "\n\(logPrefix)• Total carb insulin: \(roundToHundredth(carbInsulin))U"
+    } else {
+        // STANDARD DOSING: 100% for all carbs
+        carbInsulin = totalCarbs / carbRatio
+        
+        logMessage += "\n\(logPrefix)STANDARD DOSING:"
+        logMessage += "\n\(logPrefix)• Total carbs: \(roundToHundredth(totalCarbs))g (≤ \(largeMealThresholdDecimal)g threshold)"
+        logMessage += "\n\(logPrefix)• Carb insulin at 100%: \(roundToHundredth(carbInsulin))U"
+    }
+    
+    var totalInsulin = carbInsulin
+    
+    // Add BG correction if requested
+    if includeCorrections {
+        totalInsulin += targetDifferenceInsulin
+        logMessage += "\n\(logPrefix)• BG correction: \(roundToHundredth(targetDifferenceInsulin))U"
+        logMessage += "\n\(logPrefix)• Total before IOB: \(roundToHundredth(totalInsulin))U"
+        
+        // Apply IOB reduction
+        let iobReduction = iob > 0 ? iob : 0
+        totalInsulin = max(0, totalInsulin - iobReduction)
+        logMessage += "\n\(logPrefix)• IOB reduction: \(roundToHundredth(iobReduction))U"
+        logMessage += "\n\(logPrefix)• Total after IOB: \(roundToHundredth(totalInsulin))U"
+    }
+    
+    // Apply safety cap
+    let safetyMaxInsulin: Decimal = min(6.0, maxBolus * 0.8)
+    let cappedInsulin = min(totalInsulin, safetyMaxInsulin)
+    
+    if cappedInsulin != totalInsulin {
+        logMessage += "\n\(logPrefix)• Safety cap applied: \(roundToHundredth(cappedInsulin))U"
+    }
+    
+    // Apply safety reductions
+    let finalInsulin = applySafetyReductions(rawInsulin: cappedInsulin, isLargeMeal: useTieredDosing)
+    
+    logMessage += "\n\(logPrefix)• Final after safety: \(roundToHundredth(finalInsulin))U"
+    
+    return finalInsulin
+}
         
         func getDeltaBG() {
             let glucose = provider.fetchGlucose()
