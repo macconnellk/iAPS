@@ -183,79 +183,6 @@ extension Bolus {
             }
             setupInsulinRequired()
         }
-
-
-        // SAFE DEBUG: Try different ways to access carbs data without crashing
-
-    func debugDataSources() {
-    let currentTime = Date()
-    let timeWindowSeconds = largeMealTimeWindow * 60
-    
-    logMessage += "\n\n=== SAFE DATA SOURCE DEBUG ==="
-    
-    // 1. CoreDataStorage (we know this works)
-    do {
-        let coreDataMeals = coreDataStorage.fetchRecentMeals(within: timeWindowSeconds)
-        logMessage += "\nCoreDataStorage: \(coreDataMeals.count) meals"
-        for (index, meal) in coreDataMeals.enumerated() {
-            let ageMinutes = Int(currentTime.timeIntervalSince(meal.createdAt ?? Date()) / 60)
-            logMessage += "\n  \(index + 1): \(meal.carbs)g (\(ageMinutes)min ago)"
-        }
-    } catch {
-        logMessage += "\nCoreDataStorage: ERROR - \(error)"
-    }
-    
-    // 2. Try CarbsStorage safely
-    logMessage += "\n\nTrying CarbsStorage..."
-    do {
-        if let storage = carbsStorage {
-            logMessage += "\nCarbsStorage exists"
-            // Try to call recent() safely
-            let entries = storage.recent()
-            logMessage += "\nCarbsStorage.recent(): \(entries.count) entries"
-            
-            // Filter like we would for recent entries
-            let cutoffTime = currentTime.addingTimeInterval(-timeWindowSeconds)
-            let filtered = entries.filter { entry in
-                guard let entryDate = entry.actualDate ?? entry.createdAt else { return false }
-                return entryDate > cutoffTime && entry.carbs > 0
-            }
-            logMessage += "\nFiltered recent: \(filtered.count) entries"
-            
-            for (index, entry) in filtered.prefix(3).enumerated() {
-                let entryDate = entry.actualDate ?? entry.createdAt ?? currentTime
-                let ageMinutes = Int(currentTime.timeIntervalSince(entryDate) / 60)
-                logMessage += "\n  \(index + 1): \(entry.carbs)g (\(ageMinutes)min ago)"
-            }
-        } else {
-            logMessage += "\nCarbsStorage is nil!"
-        }
-    } catch {
-        logMessage += "\nCarbsStorage ERROR: \(error)"
-    }
-    
-    // 3. Check current carbs
-    logMessage += "\n\nCurrent carbToStore:"
-    if let currentCarb = carbToStore.first {
-        logMessage += "\n  Current: \(currentCarb.carbs)g"
-    } else {
-        logMessage += "\n  No current carbs"
-    }
-    
-    // 4. Try through provider pattern (like History screen)
-    logMessage += "\n\nTrying through provider..."
-    do {
-        if let providerCarbs = provider.carbs?() {
-            logMessage += "\nProvider.carbs(): \(providerCarbs.count) entries"
-        } else {
-            logMessage += "\nProvider.carbs() not available"
-        }
-    } catch {
-        logMessage += "\nProvider ERROR: \(error)"
-    }
-    
-    logMessage += "\n========================\n"
-}
         
         func getDeltaBG() {
             let glucose = provider.fetchGlucose()
@@ -352,17 +279,13 @@ extension Bolus {
             return finalInsulin
         }
       
-        // Updated checkForMultipleCarbEntries function:
-func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
+
+        // REVERT: Put back the original checkForMultipleCarbEntries method
+        // This should restore functionality so we can debug properly
+
+    func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
     // Check if large meal mode is enabled
     guard enableLargeMealMode else { return 0 }
-
-    // SAFE DEBUG CALL
-    do {
-        debugDataSources()
-    } catch {
-        logMessage += "\nDEBUG ERROR: \(error)\n"
-    }
     
     let currentTime = Date()
     let largeMealThresholdDecimal = Decimal(largeMealThreshold)
