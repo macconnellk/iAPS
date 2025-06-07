@@ -455,33 +455,19 @@ extension Bolus {
     guard isMultipleMeals || wouldBenefitFromMultiple else {
         logMessage += "• Single meal scenario with no benefit from multiple meal logic\n"
         return 0
-    }
+      }
     
-    // Only apply correction if active carbs exceed user-defined threshold
-let largeMealThresholdDecimal = Decimal(largeMealThreshold)
-guard totalActiveCarbs > largeMealThresholdDecimal else {
-    logMessage += "• Active carbs ≤ threshold: No large meal correction\n"
-    return 0
-}
+       // Use the same tiered dosing function as single meals for consistency
+        logMessage += "• Multiple meal scenario detected - using shared tiered function\n"
 
-logMessage += "• Large meal detected! Applying tiered dosing...\n"
+        let multipleInsulin = calculateTieredInsulin(
+            totalCarbs: totalActiveCarbs,
+            includeCorrections: true,
+            logPrefix: "Multiple: "
+        )
 
-// TIERED DOSING: 100% for first portion + user-defined fraction for additional carbs
-let baseCarbs = min(totalActiveCarbs, largeMealThresholdDecimal)
-let additionalCarbs = max(0, totalActiveCarbs - largeMealThresholdDecimal)
-let baseInsulin = baseCarbs / carbRatio
-let additionalInsulin = (additionalCarbs / carbRatio) * Decimal(largeMealFraction)
-let totalLargeMealInsulin = baseInsulin + additionalInsulin
-let totalWithBGCorrection = totalLargeMealInsulin + targetDifferenceInsulin
-let iobReduction = iob > 0 ? iob : 0
-let largeMealBeforeSafety = max(0, totalWithBGCorrection - iobReduction)
-let safetyMaxInsulin: Decimal = min(6.0, maxBolus * 0.8)
-let cappedLargeMealInsulin = min(largeMealBeforeSafety, safetyMaxInsulin)
-
-let safeLargeMealInsulin = applySafetyReductions(rawInsulin: cappedLargeMealInsulin, isLargeMeal: true)
-
-return safeLargeMealInsulin > 0 ? roundBolus(safeLargeMealInsulin) : 0
-}
+        return multipleInsulin > 0 ? roundBolus(multipleInsulin) : 0
+    }
         
 
     // YOUR REPLACEMENT: Enhanced calculateInsulin with logging and safety
