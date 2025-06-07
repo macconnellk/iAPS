@@ -396,8 +396,13 @@ extension Bolus {
     logMessage += "• CoreDataStorage: \(coreDataMeals.count) entries (includes cancelled)\n"
     logMessage += "• Saved carbs only: \(recentHistoricalCarbs.count) entries (History screen data)\n"
     
-    guard !recentHistoricalCarbs.isEmpty else {
-        logMessage += "\nNo confirmed saved carb entries in time window\n"
+    // Get current carbs being calculated
+    let currentCarbs = getEffectiveRecentCarbs()
+    logMessage += "• Current carbs being calculated: \(currentCarbs)g\n"
+    
+    // Check if we have any carbs to analyze
+    guard !recentHistoricalCarbs.isEmpty || currentCarbs > 0 else {
+        logMessage += "\nNo carb entries (saved or current) in time window\n"
         logMessage += "Multiple meal detection: DISABLED\n"
         return 0
     }
@@ -442,32 +447,37 @@ extension Bolus {
         logMessage += "• \(originalCarbs)g (\(timeAgo)min) - \(roundToHundredth(absorbedCarbs))g absorbed = \(roundToHundredth(activeCarbs))g active\n"
     }
     
-    let totalRawCarbs = confirmedMeals.reduce(0) { $0 + Decimal($1.carbs) }
+    // Include current carbs in total analysis
+    totalActiveCarbs += currentCarbs
+    
+    let totalRawCarbs = confirmedMeals.reduce(0) { $0 + Decimal($1.carbs) } + currentCarbs
     logMessage += "\nSummary:\n"
+    logMessage += "• Historical raw carbs: \(confirmedMeals.reduce(0) { $0 + Decimal($1.carbs) })g\n"
+    logMessage += "• Current carbs: \(currentCarbs)g\n"
     logMessage += "• Total raw carbs: \(totalRawCarbs)g\n"
-    logMessage += "• Total active carbs: \(roundToHundredth(totalActiveCarbs))g\n"
+    logMessage += "• Total active carbs (after absorption): \(roundToHundredth(totalActiveCarbs))g\n"
     
     // Only proceed if we have multiple meals OR if single meal benefits from multiple meal logic
-    let currentCarbs = getEffectiveRecentCarbs()
-    let isMultipleMeals = confirmedMeals.count > 1
+    let isMultipleMeals = confirmedMeals.count > 1 || (confirmedMeals.count >= 1 && currentCarbs > 0)
     let wouldBenefitFromMultiple = totalActiveCarbs > currentCarbs + 5 // 5g buffer
     
     guard isMultipleMeals || wouldBenefitFromMultiple else {
         logMessage += "• Single meal scenario with no benefit from multiple meal logic\n"
         return 0
-      }
-    
-       // Use the same tiered dosing function as single meals for consistency
-        logMessage += "• Multiple meal scenario detected - using shared tiered function\n"
-
-        let multipleInsulin = calculateTieredInsulin(
-            totalCarbs: totalActiveCarbs,
-            includeCorrections: true,
-            logPrefix: "Multiple: "
-        )
-
-        return multipleInsulin > 0 ? roundBolus(multipleInsulin) : 0
     }
+    
+    // Use the same tiered dosing function as single meals for consistency
+    logMessage += "• Multiple meal scenario detected - using shared tiered function\n"
+    logMessage += "• Total for calculation: \(roundToHundredth(totalActiveCarbs))g (includes current \(currentCarbs)g)\n"
+
+    let multipleInsulin = calculateTieredInsulin(
+        totalCarbs: totalActiveCarbs,  // 🚨 NOW INCLUDES CURRENT CARBS!
+        includeCorrections: true,
+        logPrefix: "Multiple: "
+    )
+
+    return multipleInsulin > 0 ? roundBolus(multipleInsulin) : 0
+}
         
 
     // YOUR REPLACEMENT: Enhanced calculateInsulin with logging and safety
