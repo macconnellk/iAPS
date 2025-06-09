@@ -112,7 +112,7 @@ extension Bolus {
                                 .frame(maxWidth: .infinity, alignment: .leading)
 
                             Button(action: { showLargeMealSettings.toggle() }) {
-                                Image(systemName: "info.circle")
+                                Image(systemName: "gear.circle")
                                     .foregroundColor(.secondary)
                             }
                             .buttonStyle(PlainButtonStyle())
@@ -261,62 +261,182 @@ extension Bolus {
                 }
             }
             .popover(isPresented: $showLargeMealSettings) {
-                VStack(alignment: .leading, spacing: 16) {
-                    Text("Large Meal Detection Settings")
-                        .font(.headline)
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        // Header with Accept button
+                        HStack {
+                            Text("Bolus Calculator Settings")
+                                .font(.headline)
+                                .fontWeight(.bold)
+                            Spacer()
+                            Button("Accept") {
+                                showLargeMealSettings = false
+                            }
+                            .buttonStyle(.borderedProminent)
+                        }
                         .padding(.bottom, 8)
-                    
-                    Toggle("Enable Large Meal Detection", isOn: $state.enableLargeMealMode)
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Time Window: \(Int(state.largeMealTimeWindow)) minutes")
+                        
+                        Divider()
+                        
+                        // Large Meal Settings Section
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("Large Meal Detection")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.primary)
+                            
+                            Toggle("Enable Large Meal Detection", isOn: $state.enableLargeMealMode)
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Time Window: \(Int(state.largeMealTimeWindow)) minutes")
+                                    .font(.caption)
+                                Slider(value: $state.largeMealTimeWindow, in: 30...120, step: 15)
+                                Text("Look back this many minutes for meal entries")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Threshold: \(Int(state.largeMealThreshold))g")
+                                    .font(.caption)
+                                Slider(value: $state.largeMealThreshold, in: 50...100, step: 5)
+                                Text("Trigger large meal logic above this amount")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Absorption Rate: \(Int(state.carbAbsorptionRate))g/hour")
+                                    .font(.caption)
+                                Slider(value: $state.carbAbsorptionRate, in: 20...40, step: 5)
+                                Text("Carb absorption rate for decay calculation")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Large Meal Fraction: \(Int(state.largeMealFraction * 100))%")
+                                    .font(.caption)
+                                Slider(value: $state.largeMealFraction, in: 0.5...1.0, step: 0.05)
+                                Text("Fraction applied to additional carbs above threshold")
+                                    .font(.caption2)
+                                    .foregroundColor(.secondary)
+                            }
+                        }
+                        
+                        Divider()
+                        
+                        // Safety Settings Section
+                        VStack(alignment: .leading, spacing: 16) {
+                            Text("Safety Thresholds")
+                                .font(.subheadline)
+                                .fontWeight(.semibold)
+                                .foregroundColor(.primary)
+                            
+                            Toggle("Enable Safety Reductions", isOn: $state.enableSafetyReductions)
+                            
+                            Group {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Rapid Drop Threshold: \(Int(state.rapidDropThreshold)) mg/dL")
+                                        .font(.caption)
+                                    Slider(value: $state.rapidDropThreshold, in: -60...(-20), step: 5)
+                                    Text("BG drop rate for severe reduction (default: -45)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Moderate Drop Threshold: \(Int(state.moderateDropThreshold)) mg/dL")
+                                        .font(.caption)
+                                    Slider(value: $state.moderateDropThreshold, in: -45...(-15), step: 5)
+                                    Text("BG drop rate for moderate reduction (default: -30)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("High BG Offset: \(Int(state.highBgOffset)) mg/dL")
+                                        .font(.caption)
+                                    Slider(value: $state.highBgOffset, in: 30...80, step: 5)
+                                    Text("BG offset for rapid drop threshold (default: 50)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Moderate BG Offset: \(Int(state.moderateBgOffset)) mg/dL")
+                                        .font(.caption)
+                                    Slider(value: $state.moderateBgOffset, in: 20...50, step: 5)
+                                    Text("BG offset for moderate drop threshold (default: 30)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                            
+                            Group {
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Severe Reduction Factor: \(Int(state.severeReductionFactor * 100))%")
+                                        .font(.caption)
+                                    Slider(value: $state.severeReductionFactor, in: 0.5...0.9, step: 0.05)
+                                    Text("Insulin reduction for rapid BG drops (default: 70%)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Moderate Reduction Factor: \(Int(state.moderateReductionFactor * 100))%")
+                                        .font(.caption)
+                                    Slider(value: $state.moderateReductionFactor, in: 0.6...0.95, step: 0.05)
+                                    Text("Insulin reduction for moderate BG drops (default: 80%)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                                
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text("Prediction Safety Factor: \(String(format: "%.2f", state.predictionSafetyFactor))")
+                                        .font(.caption)
+                                    Slider(value: $state.predictionSafetyFactor, in: 1.0...2.0, step: 0.05)
+                                    Text("Additional safety margin for prediction-based reductions (default: 1.25)")
+                                        .font(.caption2)
+                                        .foregroundColor(.secondary)
+                                }
+                            }
+                        }
+                        
+                        Divider()
+                        
+                        // Reset Buttons
+                        HStack(spacing: 12) {
+                            Button("Reset Large Meal") {
+                                state.enableLargeMealMode = true
+                                state.largeMealTimeWindow = 60
+                                state.largeMealThreshold = 65
+                                state.carbAbsorptionRate = 30
+                                state.largeMealFraction = 0.8
+                            }
                             .font(.caption)
-                        Slider(value: $state.largeMealTimeWindow, in: 30...120, step: 15)
-                        Text("Look back this many minutes for meal entries")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Threshold: \(Int(state.largeMealThreshold))g")
+                            .foregroundColor(.blue)
+                            
+                            Button("Reset Safety") {
+                                state.enableSafetyReductions = true
+                                state.rapidDropThreshold = -45
+                                state.moderateDropThreshold = -30
+                                state.highBgOffset = 50
+                                state.moderateBgOffset = 30
+                                state.severeReductionFactor = 0.7
+                                state.moderateReductionFactor = 0.8
+                                state.predictionSafetyFactor = 1.25
+                            }
                             .font(.caption)
-                        Slider(value: $state.largeMealThreshold, in: 50...100, step: 5)
-                        Text("Trigger large meal logic above this amount")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
+                            .foregroundColor(.blue)
+                            
+                            Spacer()
+                        }
+                        .padding(.top, 8)
                     }
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Absorption Rate: \(Int(state.carbAbsorptionRate))g/hour")
-                            .font(.caption)
-                        Slider(value: $state.carbAbsorptionRate, in: 20...40, step: 5)
-                        Text("Carb absorption rate for decay calculation")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("Large Meal Fraction: \(Int(state.largeMealFraction * 100))%")
-                            .font(.caption)
-                        Slider(value: $state.largeMealFraction, in: 0.5...1.0, step: 0.05)
-                        Text("Fraction applied to additional carbs above threshold")
-                            .font(.caption2)
-                            .foregroundColor(.secondary)
-                    }
-                    
-                    Button("Reset to Defaults") {
-                        state.enableLargeMealMode = true
-                        state.largeMealTimeWindow = 60
-                        state.largeMealThreshold = 65
-                        state.carbAbsorptionRate = 30
-                        state.largeMealFraction = 0.8
-                    }
-                    .font(.caption)
-                    .foregroundColor(.blue)
-                    .padding(.top, 8)
+                    .padding()
                 }
-                .padding()
-                .frame(width: 320, height: 400)
+                .frame(width: 400, height: 600)
             }
             .interactiveDismissDisabled()
             .compactSectionSpacing()
