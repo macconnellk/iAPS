@@ -128,6 +128,38 @@ extension Bolus {
             didSet { UserDefaults.standard.set(largeMealFraction, forKey: "largeMealFraction") }
             }
 
+            @Published var enableSafetyReductions: Bool = UserDefaults.standard.object(forKey: "enableSafetyReductions") as? Bool ?? true {
+    didSet { UserDefaults.standard.set(enableSafetyReductions, forKey: "enableSafetyReductions") }
+}
+
+@Published var rapidDropThreshold: Double = UserDefaults.standard.object(forKey: "rapidDropThreshold") as? Double ?? -45 {
+    didSet { UserDefaults.standard.set(rapidDropThreshold, forKey: "rapidDropThreshold") }
+}
+
+@Published var moderateDropThreshold: Double = UserDefaults.standard.object(forKey: "moderateDropThreshold") as? Double ?? -30 {
+    didSet { UserDefaults.standard.set(moderateDropThreshold, forKey: "moderateDropThreshold") }
+}
+
+@Published var highBgOffset: Double = UserDefaults.standard.object(forKey: "highBgOffset") as? Double ?? 50 {
+    didSet { UserDefaults.standard.set(highBgOffset, forKey: "highBgOffset") }
+}
+
+@Published var moderateBgOffset: Double = UserDefaults.standard.object(forKey: "moderateBgOffset") as? Double ?? 30 {
+    didSet { UserDefaults.standard.set(moderateBgOffset, forKey: "moderateBgOffset") }
+}
+
+@Published var severeReductionFactor: Double = UserDefaults.standard.object(forKey: "severeReductionFactor") as? Double ?? 0.7 {
+    didSet { UserDefaults.standard.set(severeReductionFactor, forKey: "severeReductionFactor") }
+}
+
+@Published var moderateReductionFactor: Double = UserDefaults.standard.object(forKey: "moderateReductionFactor") as? Double ?? 0.8 {
+    didSet { UserDefaults.standard.set(moderateReductionFactor, forKey: "moderateReductionFactor") }
+}
+
+@Published var predictionSafetyFactor: Double = UserDefaults.standard.object(forKey: "predictionSafetyFactor") as? Double ?? 1.25 {
+    didSet { UserDefaults.standard.set(predictionSafetyFactor, forKey: "predictionSafetyFactor") }
+}
+
         let loopReminder: CGFloat = 4
         let coreDataStorage = CoreDataStorage()
 
@@ -316,62 +348,77 @@ extension Bolus {
         
         // EXTRACTED: Safety reduction logic that both main calculation and large meal can use
         func applySafetyReductions(rawInsulin: Decimal, isLargeMeal: Bool = false) -> Decimal {
-            var deltaBasedInsulin = rawInsulin
-            var predictionBasedInsulin = rawInsulin
-            let originalInsulin = rawInsulin
+    // Check if safety reductions are enabled
+    guard enableSafetyReductions else {
+        logMessage += "\nSafety reductions disabled - using full calculated insulin"
+        return rawInsulin
+    }
     
-            // Calculate BG delta-based reduction
-            if deltaBasedInsulin > 0 {
-                if deltaBG <= -45 && currentBG < (threshold + 50) {
-                    // Double arrow down rate (>3 mg/dL/min drop)
-                    deltaBasedInsulin = deltaBasedInsulin * 0.7
-                    deltaReductionApplied = true
-                    logMessage += "\nVery rapid BG drop \(deltaBG), delta-based calculation suggests 70% of original bolus"
-                } else if deltaBG <= -30 && currentBG < (threshold + 30) {
-            // Single arrow down rate (2-3 mg/dL/min drop)
-            deltaBasedInsulin = deltaBasedInsulin * 0.8
+    var deltaBasedInsulin = rawInsulin
+    var predictionBasedInsulin = rawInsulin
+    let originalInsulin = rawInsulin
+
+    // Calculate BG delta-based reduction using configurable thresholds
+    if deltaBasedInsulin > 0 {
+        let rapidThreshold = Decimal(rapidDropThreshold)
+        let moderateThreshold = Decimal(moderateDropThreshold)
+        let highOffset = Decimal(highBgOffset)
+        let moderateOffset = Decimal(moderateBgOffset)
+        let severeReduction = Decimal(severeReductionFactor)
+        let moderateReduction = Decimal(moderateReductionFactor)
+        
+        if deltaBG <= rapidThreshold && currentBG < (threshold + highOffset) {
+            // Severe BG drop rate
+            deltaBasedInsulin = deltaBasedInsulin * severeReduction
             deltaReductionApplied = true
-            logMessage += "\nRapid BG drop \(deltaBG), delta-based calculation suggests 80% of original bolus"
-               }
-            }
-    
-            // Calculate prediction-based reduction
-            if minimumPrediction && predictionBasedInsulin > 0 {
-                if minPredBG < threshold {
-                    // Reduce insulin based on threshold prediction
-                    belowThresholdInsulinReduction = roundBolus(abs(threshold + 10 - minPredBG) / isf)
-                    // Apply a safety factor to reduce further
-                    belowThresholdInsulinReduction = roundBolus(belowThresholdInsulinReduction * 1.25)
-                    predictionBasedInsulin = predictionBasedInsulin - abs(belowThresholdInsulinReduction)
-                    predictionReductionApplied = true
-                    logMessage += "\nminPrediction \(minPredBG) < threshold, prediction-based calculation suggests reducing bolus by \(belowThresholdInsulinReduction)"
-                } else if evBG < target {
-                    // Reduce insulin based on eventual BG prediction
-                    belowTargetInsulinReduction = roundBolus(abs(target - evBG) / isf)
-                    predictionBasedInsulin = predictionBasedInsulin - abs(belowTargetInsulinReduction)
-                    predictionReductionApplied = true
-                    logMessage += "\nEventual BG \(evBG) < target, prediction-based calculation suggests reducing bolus by \(belowTargetInsulinReduction)"
-                }
-            }
-    
-            // Choose the minimum insulin amount
-            let finalInsulin = min(deltaBasedInsulin, predictionBasedInsulin)
-    
-            // Add comparison log if both reductions applied
-            if deltaReductionApplied && predictionReductionApplied {
-                logMessage += "\nFinal insulin calculation chose minimum between delta-based (\(roundToHundredth(deltaBasedInsulin))) and prediction-based (\(roundToHundredth(predictionBasedInsulin))) calculations"
-            }
-    
-            // Only add final insulin amount if any safety reductions were applied
-            if deltaReductionApplied || predictionReductionApplied {
-                if finalInsulin != originalInsulin {
-                    let mealType = isLargeMeal ? "large meal" : "standard"
-                    logMessage += "\nFinal \(mealType) insulin after safety: \(roundToHundredth(finalInsulin))U"
-                }
-            }
-    
-            return finalInsulin
+            logMessage += "\nVery rapid BG drop \(deltaBG) (≤\(rapidThreshold)), delta-based calculation suggests \(Int(severeReductionFactor * 100))% of original bolus"
+        } else if deltaBG <= moderateThreshold && currentBG < (threshold + moderateOffset) {
+            // Moderate BG drop rate
+            deltaBasedInsulin = deltaBasedInsulin * moderateReduction
+            deltaReductionApplied = true
+            logMessage += "\nRapid BG drop \(deltaBG) (≤\(moderateThreshold)), delta-based calculation suggests \(Int(moderateReductionFactor * 100))% of original bolus"
         }
+    }
+
+    // Calculate prediction-based reduction using configurable safety factor
+    if minimumPrediction && predictionBasedInsulin > 0 {
+        let safetyFactor = Decimal(predictionSafetyFactor)
+        
+        if minPredBG < threshold {
+            // Reduce insulin based on threshold prediction
+            belowThresholdInsulinReduction = roundBolus(abs(threshold + 10 - minPredBG) / isf)
+            // Apply configurable safety factor
+            belowThresholdInsulinReduction = roundBolus(belowThresholdInsulinReduction * safetyFactor)
+            predictionBasedInsulin = predictionBasedInsulin - abs(belowThresholdInsulinReduction)
+            predictionReductionApplied = true
+            logMessage += "\nminPrediction \(minPredBG) < threshold, prediction-based calculation suggests reducing bolus by \(belowThresholdInsulinReduction) (safety factor: \(safetyFactor))"
+        } else if evBG < target {
+            // Reduce insulin based on eventual BG prediction
+            belowTargetInsulinReduction = roundBolus(abs(target - evBG) / isf)
+            predictionBasedInsulin = predictionBasedInsulin - abs(belowTargetInsulinReduction)
+            predictionReductionApplied = true
+            logMessage += "\nEventual BG \(evBG) < target, prediction-based calculation suggests reducing bolus by \(belowTargetInsulinReduction)"
+        }
+    }
+
+    // Choose the minimum insulin amount
+    let finalInsulin = min(deltaBasedInsulin, predictionBasedInsulin)
+
+    // Add comparison log if both reductions applied
+    if deltaReductionApplied && predictionReductionApplied {
+        logMessage += "\nFinal insulin calculation chose minimum between delta-based (\(roundToHundredth(deltaBasedInsulin))) and prediction-based (\(roundToHundredth(predictionBasedInsulin))) calculations"
+    }
+
+    // Only add final insulin amount if any safety reductions were applied
+    if deltaReductionApplied || predictionReductionApplied {
+        if finalInsulin != originalInsulin {
+            let mealType = isLargeMeal ? "large meal" : "standard"
+            logMessage += "\nFinal \(mealType) insulin after safety: \(roundToHundredth(finalInsulin))U"
+        }
+    }
+
+    return finalInsulin
+}
       
    // COMPLETE checkForMultipleCarbEntries function
     func checkForMultipleCarbEntries(currentCalculatedInsulin: Decimal) -> Decimal {
