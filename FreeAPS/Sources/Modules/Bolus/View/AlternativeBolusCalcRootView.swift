@@ -308,7 +308,7 @@ extension Bolus {
                             VStack(alignment: .leading, spacing: 4) {
                                 Text("Absorption Rate: \(Int(state.carbAbsorptionRate))g/hour")
                                     .font(.caption)
-                                Slider(value: $state.carbAbsorptionRate, in: 20...40, step: 5)
+                                Slider(value: $state.carbAbsorptionRate, in: 20...40, step: 1)
                                 Text("Carb absorption rate for decay calculation")
                                     .font(.caption2)
                                     .foregroundColor(.secondary)
@@ -358,7 +358,7 @@ extension Bolus {
                                     Text("High BG Offset: \(Int(state.highBgOffset)) mg/dL")
                                         .font(.caption)
                                     Slider(value: $state.highBgOffset, in: 30...80, step: 5)
-                                    Text("BG offset for rapid drop threshold (default: 50)")
+                                    Text("Apply severe reduction only when BG < (threshold + this offset)")
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
                                 }
@@ -367,7 +367,7 @@ extension Bolus {
                                     Text("Moderate BG Offset: \(Int(state.moderateBgOffset)) mg/dL")
                                         .font(.caption)
                                     Slider(value: $state.moderateBgOffset, in: 20...50, step: 5)
-                                    Text("BG offset for moderate drop threshold (default: 30)")
+                                    Text("Apply moderate reduction only when BG < (threshold + this offset)")
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
                                 }
@@ -378,7 +378,7 @@ extension Bolus {
                                     Text("Severe Reduction Factor: \(Int(state.severeReductionFactor * 100))%")
                                         .font(.caption)
                                     Slider(value: $state.severeReductionFactor, in: 0.5...0.9, step: 0.05)
-                                    Text("Insulin reduction for rapid BG drops (default: 70%)")
+                                    Text("% of insulin to give when BG drops very rapidly (≤-45 mg/dL)")
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
                                 }
@@ -387,7 +387,7 @@ extension Bolus {
                                     Text("Moderate Reduction Factor: \(Int(state.moderateReductionFactor * 100))%")
                                         .font(.caption)
                                     Slider(value: $state.moderateReductionFactor, in: 0.6...0.95, step: 0.05)
-                                    Text("Insulin reduction for moderate BG drops (default: 80%)")
+                                    Text("% of insulin to give when BG drops moderately (≤-30 mg/dL)")
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
                                 }
@@ -396,7 +396,7 @@ extension Bolus {
                                     Text("Prediction Safety Factor: \(String(format: "%.2f", state.predictionSafetyFactor))")
                                         .font(.caption)
                                     Slider(value: $state.predictionSafetyFactor, in: 1.0...2.0, step: 0.05)
-                                    Text("Additional safety margin for prediction-based reductions (default: 1.25)")
+                                    Text("Extra safety margin for prediction-based insulin reductions")
                                         .font(.caption2)
                                         .foregroundColor(.secondary)
                                 }
