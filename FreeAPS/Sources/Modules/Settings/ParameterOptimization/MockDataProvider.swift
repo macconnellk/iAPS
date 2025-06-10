@@ -130,5 +130,3 @@ class MockDataProvider {
     }
 }
 
-// Temporary test - call this somewhere
-MockDataProvider.validateStep2()
