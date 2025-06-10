@@ -116,7 +116,7 @@ extension Screen {
         case .autoISF:
             AutoISF.RootView(resolver: resolver)
         case .parameterOptimization:
-            ParameterOptimizationRootView()
+            Settings.ParameterOptimization.RootView(resolver: resolver)
         }
     }
 
