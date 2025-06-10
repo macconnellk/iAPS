@@ -21,10 +21,6 @@ extension Home {
         @State var showBolusActiveAlert = false
         @State var displayAutoHistory = false
 
-        // Custom entries for Setting Optimizer    
-        @State private var showTest = false
-
-
         let buttonFont = Font.custom("TimeButtonFont", size: 14)
         let viewPadding: CGFloat = 5
 
@@ -761,32 +757,11 @@ extension Home {
                                 // Main Chart
                                 chart
                                 // Adjust hours visible (X-Axis) and optional ratio display
-                                // Adjust hours visible (X-Axis) and optional ratio display
                                 if state.extended {
-                                    VStack {
-                                        // Test button - TEMPORARY
-                                        Button("🧠 Test Parameter Optimization") {
-                                            showTest = true
-                                        }
-                                        .padding()
-                                        .background(Color.blue.opacity(0.1))
-                                        .cornerRadius(8)
-                                        
-                                        timeSetting
-                                            .overlay { isfView }
-                                    }
+                                    timeSetting
+                                        .overlay { isfView }
                                 } else {
-                                    VStack {
-                                        // Test button - TEMPORARY  
-                                        Button("🧠 Test Parameter Optimization") {
-                                            showTest = true
-                                        }
-                                        .padding()
-                                        .background(Color.blue.opacity(0.1))
-                                        .cornerRadius(8)
-                                        
-                                        timeSetting
-                                    }
+                                    timeSetting
                                 }
                                 // TIR Chart
                                 if !state.data.glucose.isEmpty {
@@ -856,11 +831,6 @@ extension Home {
             .ignoresSafeArea(.keyboard)
             .sheet(isPresented: $displayAutoHistory) {
                 AutoISFHistoryView(units: state.data.units)
-            }
-            .sheet(isPresented: $showTest) {  // ← ADD THIS
-                Text("Parameter Optimization Test!")
-                    .font(.title)
-                    .padding()
             }
             .popup(isPresented: state.isStatusPopupPresented, alignment: .bottom, direction: .bottom) {
                 popup
