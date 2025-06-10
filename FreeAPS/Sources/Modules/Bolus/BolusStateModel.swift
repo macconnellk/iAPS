@@ -243,8 +243,19 @@ extension Bolus {
            }
         }
 
-        // STAGE 1: Add this function to your StateModel but DON'T CALL IT YET
-    // This is just testing that the function itself compiles correctly
+
+// Temporary test - add this anywhere in your existing code
+func testStep1() {
+    let reading = GlucoseReading(
+        date: Date(), 
+        sgv: 120, 
+        direction: "Flat", 
+        isValid: true, 
+        isPressureLow: false
+    )
+    print("Step 1 works! Glucose: \(reading.sgv)")
+}
+        
 
     func calculateTieredInsulin(totalCarbs: Decimal, includeCorrections: Bool = true, logPrefix: String = "") -> Decimal {
     guard totalCarbs > 0 else { return 0 }
