@@ -21,6 +21,16 @@ extension Home {
         @State var showBolusActiveAlert = false
         @State var displayAutoHistory = false
 
+        // Custom entries for Setting Optimizer    
+        @State var isStatusPopupPresented = false
+        @State var showCancelAlert = false
+        @State var showCancelTTAlert = false
+        @State var triggerUpdate = false
+        @State var display = false
+        @State var displayGlucose = false
+        @State private var showParameterOptimization = false
+
+
         let buttonFont = Font.custom("TimeButtonFont", size: 14)
         let viewPadding: CGFloat = 5
 
@@ -164,6 +174,20 @@ extension Home {
                 state.runLoop()
             }
             .offset(y: 10)
+        }
+
+        private var parameterOptimizationButton: some View {
+            Button(action: {
+                showParameterOptimization = true
+            }) {
+                Image(systemName: "brain.head.profile")
+                    .font(.system(size: 18))
+                    .foregroundColor(.blue)
+            }
+            .buttonStyle(.plain)
+            .sheet(isPresented: $showParameterOptimization) {
+                ParameterOptimizationRootView()
+            }
         }
 
         var tempBasalString: String {
@@ -758,11 +782,21 @@ extension Home {
                                 chart
                                 // Adjust hours visible (X-Axis) and optional ratio display
                                 if state.extended {
-                                    timeSetting
-                                        .overlay { isfView }
-                                } else {
-                                    timeSetting
-                                }
+                            HStack {
+                                parameterOptimizationButton
+                                Spacer()
+                                timeSetting
+                                    .overlay { isfView }
+                            }
+                            .padding(.horizontal)
+                        } else {
+                            HStack {
+                                parameterOptimizationButton
+                                Spacer()
+                                timeSetting
+                            }
+                            .padding(.horizontal)
+                        }
                                 // TIR Chart
                                 if !state.data.glucose.isEmpty {
                                     preview.padding(.top, 15)
