@@ -763,10 +763,30 @@ extension Home {
                                 // Adjust hours visible (X-Axis) and optional ratio display
                                 // Adjust hours visible (X-Axis) and optional ratio display
                                 if state.extended {
-                                    timeSetting
-                                        .overlay { isfView }
+                                    VStack {
+                                        // Test button - TEMPORARY
+                                        Button("🧠 Test Parameter Optimization") {
+                                            showTest = true
+                                        }
+                                        .padding()
+                                        .background(Color.blue.opacity(0.1))
+                                        .cornerRadius(8)
+                                        
+                                        timeSetting
+                                            .overlay { isfView }
+                                    }
                                 } else {
-                                    timeSetting
+                                    VStack {
+                                        // Test button - TEMPORARY  
+                                        Button("🧠 Test Parameter Optimization") {
+                                            showTest = true
+                                        }
+                                        .padding()
+                                        .background(Color.blue.opacity(0.1))
+                                        .cornerRadius(8)
+                                        
+                                        timeSetting
+                                    }
                                 }
                                 // TIR Chart
                                 if !state.data.glucose.isEmpty {
@@ -836,6 +856,11 @@ extension Home {
             .ignoresSafeArea(.keyboard)
             .sheet(isPresented: $displayAutoHistory) {
                 AutoISFHistoryView(units: state.data.units)
+            }
+            .sheet(isPresented: $showTest) {  // ← ADD THIS
+                Text("Parameter Optimization Test!")
+                    .font(.title)
+                    .padding()
             }
             .popup(isPresented: state.isStatusPopupPresented, alignment: .bottom, direction: .bottom) {
                 popup
