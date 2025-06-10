@@ -62,3 +62,6 @@ final class ParameterOptimizationStateModel: ObservableObject {
         print("🎉 Step 3 Complete - State management working!")
     }
 }
+
+let stateModel = ParameterOptimizationStateModel()
+stateModel.validateStep3()
