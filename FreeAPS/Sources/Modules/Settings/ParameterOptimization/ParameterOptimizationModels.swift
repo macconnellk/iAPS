@@ -189,18 +189,3 @@ extension ClosedRange: Codable where Bound: Codable {
         case upperBound
     }
 }
-
-// TEMPORARY TEST - Add this to the bottom of ParameterOptimizationModels.swift
-func testParameterOptimizationModels() {
-    let reading = GlucoseReading(
-        date: Date(), 
-        sgv: 120, 
-        direction: "Flat", 
-        isValid: true, 
-        isPressureLow: false
-    )
-    print("✅ Step 1 works! Glucose: \(reading.sgv)")
-    
-    let settings = AnalysisSettings()
-    print("✅ Settings work! TIR Target: \(settings.timeInRangeTarget)%")
-}
