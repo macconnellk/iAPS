@@ -1,4 +1,5 @@
 import Combine
+import Foundation
 import SwiftUI
 import Swinject
 
@@ -116,7 +117,7 @@ extension Screen {
         case .autoISF:
             AutoISF.RootView(resolver: resolver)
         case .parameterOptimization:
-            Settings.ParameterOptimization.RootView(resolver: resolver)
+            ParameterOptimizationRootView()
         }
     }
 
