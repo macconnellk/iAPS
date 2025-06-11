@@ -116,8 +116,7 @@ extension Screen {
         case .autoISF:
             AutoISF.RootView(resolver: resolver)
         case .parameterOptimization:
-            Text("Parameter Optimization - Coming Soon")
-        .navigationTitle("Parameter Optimization")    
+            ParameterOptimization.RootView(resolver: resolver)    
         }
     }
 
