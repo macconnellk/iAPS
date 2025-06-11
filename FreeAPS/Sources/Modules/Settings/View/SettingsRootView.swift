@@ -79,7 +79,6 @@ extension Settings {
                 Section {
                     Text("OpenAPS").navigationLink(to: .preferencesEditor, from: self)
                     Text("Autotune").navigationLink(to: .autotuneConfig, from: self)
-                    Text("Parameter Optimization").navigationLink(to: .parameterOptimization, from: self)
                 } header: { Text("OpenAPS") }
 
                 Section {
