@@ -7,6 +7,7 @@ extension Settings {
         let resolver: Resolver
         @StateObject var state = StateModel()
         @State private var showShareSheet = false
+        @State private var showParameterOptimization = false
 
         @FetchRequest(
             entity: VNr.entity(),
