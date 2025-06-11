@@ -216,6 +216,9 @@ extension Settings {
             .sheet(isPresented: $showShareSheet) {
                 ShareSheet(activityItems: state.logItems())
             }
+            .sheet(isPresented: $showParameterOptimization) {
+                ParameterOptimizationRootView()
+            }
             .dynamicTypeSize(...DynamicTypeSize.xxLarge)
             .onAppear(perform: configureView)
             .navigationTitle("Settings")
