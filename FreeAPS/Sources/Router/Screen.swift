@@ -38,7 +38,7 @@ enum Screen: Identifiable, Hashable {
     case contactTrick
     case sharing
     case autoISF
-    case parameterOptimization
+   // case parameterOptimization
     var id: Int { String(reflecting: self).hashValue }
 }
 
