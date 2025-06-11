@@ -7,7 +7,6 @@ extension Settings {
         let resolver: Resolver
         @StateObject var state = StateModel()
         @State private var showShareSheet = false
-        @State private var showParameterOptimization = false
 
         @FetchRequest(
             entity: VNr.entity(),
@@ -80,10 +79,6 @@ extension Settings {
                 Section {
                     Text("OpenAPS").navigationLink(to: .preferencesEditor, from: self)
                     Text("Autotune").navigationLink(to: .autotuneConfig, from: self)
-                    // Custom Buttom for Paramter Optimization
-                    Button("Parameter Optimization") {
-                        showParameterOptimization = true
-                    }
                 } header: { Text("OpenAPS") }
 
                 Section {
@@ -216,10 +211,6 @@ extension Settings {
             }
             .sheet(isPresented: $showShareSheet) {
                 ShareSheet(activityItems: state.logItems())
-            }
-            // Custom sheet for Paramter Optimmization
-            .sheet(isPresented: $showParameterOptimization) {
-                ParameterOptimizationRootView()
             }
             .dynamicTypeSize(...DynamicTypeSize.xxLarge)
             .onAppear(perform: configureView)
