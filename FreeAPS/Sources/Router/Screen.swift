@@ -115,8 +115,8 @@ extension Screen {
             Sharing.RootView(resolver: resolver)
         case .autoISF:
             AutoISF.RootView(resolver: resolver)
-        case .parameterOptimization:
-            ParameterOptimization.RootView(resolver: resolver)    
+        //case .parameterOptimization:
+         //   ParameterOptimization.RootView(resolver: resolver)    
         }
     }
 
