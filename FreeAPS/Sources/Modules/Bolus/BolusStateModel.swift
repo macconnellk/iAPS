@@ -295,7 +295,7 @@ extension Bolus {
     }
     
     // Apply safety cap
-    let safetyMaxInsulin: Decimal = min(6.0, maxBolus * 0.8)
+    let safetyMaxInsulin: Decimal = maxBolus
     let cappedInsulin = min(totalInsulin, safetyMaxInsulin)
     
     if cappedInsulin != totalInsulin {
