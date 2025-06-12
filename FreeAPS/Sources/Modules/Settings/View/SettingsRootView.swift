@@ -217,7 +217,7 @@ extension Settings {
                 ShareSheet(activityItems: state.logItems())
             }
             .sheet(isPresented: $showParameterOptimization) {
-                Text("Test View Works!")
+                ParameterOptimizationRootView()
             }
             .dynamicTypeSize(...DynamicTypeSize.xxLarge)
             .onAppear(perform: configureView)
