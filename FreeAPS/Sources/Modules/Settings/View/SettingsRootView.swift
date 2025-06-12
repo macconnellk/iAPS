@@ -217,7 +217,7 @@ extension Settings {
                 ShareSheet(activityItems: state.logItems())
             }
             .sheet(isPresented: $showParameterOptimization) {
-                ParameterOptimizationRootView()
+                ParameterOptimizationWrapper()
             }
             .dynamicTypeSize(...DynamicTypeSize.xxLarge)
             .onAppear(perform: configureView)
@@ -225,6 +225,11 @@ extension Settings {
             .navigationBarItems(trailing: Button("Close", action: state.hideSettingsModal))
             .navigationBarTitleDisplayMode(.inline)
             .onDisappear(perform: { state.uploadProfileAndSettings(false) })
+        }
+    }
+        struct ParameterOptimizationWrapper: View {
+        var body: some View {
+            ParameterOptimizationRootView()
         }
     }
 }
