@@ -189,24 +189,55 @@ extension Bolus {
             // If failed recent suggestion use recent IOB value
             iobInsulinReduction = (-1) * max(iob, recentIOB)
 
-            // adding everything together
-            // add a calc for the case that no fifteenMinInsulin is available
+            // Gross requirement: the insulin this meal and this glucose state call for,
+            // before any pacing and before crediting insulin already delivered.
+            let grossRequirement: Decimal
             if deltaBG != 0 {
-                wholeCalc = (targetDifferenceInsulin + iobInsulinReduction + wholeCobInsulin + fifteenMinInsulin)
+                grossRequirement = targetDifferenceInsulin + wholeCobInsulin + fifteenMinInsulin
             } else if currentBG == 0, manualGlucose == 0 {
-                wholeCalc = (iobInsulinReduction + wholeCobInsulin)
+                grossRequirement = wholeCobInsulin
             } else {
-                wholeCalc = (targetDifferenceInsulin + iobInsulinReduction + wholeCobInsulin)
+                grossRequirement = targetDifferenceInsulin + wholeCobInsulin
             }
 
-            // apply custom factor at the end of the calculations
-            let result = !eventualBG ? wholeCalc * fraction : insulin * fraction
+            // Net requirement, unpaced. Retained with its previous meaning for display and
+            // for any consumer of this published property. Not the value that is dosed.
+            wholeCalc = grossRequirement + iobInsulinReduction
 
-            // apply custom factor if fatty meal toggle in bolus calc config settings is on and the box for fatty meals is checked (in RootView)
-            if useFattyMealCorrectionFactor {
-                insulinCalculated = result * fattyMealFactor
+            if eventualBG {
+                // Oref0 eventual-glucose path. `insulin` is already a net figure derived
+                // from the prediction rather than from COB, so pacing applies to it
+                // directly and there is no separate IOB term to credit.
+                let result = insulin * fraction
+                insulinCalculated = useFattyMealCorrectionFactor ? result * fattyMealFactor : result
             } else {
-                insulinCalculated = result
+                // Pacing applies to the gross requirement only. Insulin already delivered is
+                // credited in full, because it is on board at 100% and not at the pacing
+                // percentage.
+                //
+                // overrideFactor deliberately withholds part of the requirement so the loop
+                // can deliver it as SMBs over the following 60-90 minutes. That withheld
+                // insulin is, by construction, a gap between COB and IOB. Scaling the whole
+                // expression by the pacing factor scales the IOB term with it, so only
+                // `fraction` of the insulin on board is credited back and the remaining
+                // (1 - fraction) x IOB is re-offered as a new dose. Reopening the calculator
+                // while a meal is still absorbing therefore re-doses insulin that has
+                // already been delivered, and does so again on every subsequent opening.
+                //
+                // Pacing the gross requirement and subtracting IOB at full value preserves
+                // the intent of overrideFactor - deliver `fraction` of what the meal calls
+                // for and let SMBs complete it - while making the result a function of what
+                // is outstanding rather than of how many times the calculator was opened.
+                //
+                // The fatty meal / High GI factor multiplies the same gross requirement, so
+                // a factor equal to 1 / overrideFactor continues to mean "deliver the full
+                // requirement upfront". That path is unaffected by this change: when the
+                // product of the two factors is 1, there is no withheld portion to re-offer.
+                var pacedRequirement = grossRequirement * fraction
+                if useFattyMealCorrectionFactor {
+                    pacedRequirement *= fattyMealFactor
+                }
+                insulinCalculated = pacedRequirement + iobInsulinReduction
             }
 
             // A blend of Oref0 predictions and the Swift calculator {
