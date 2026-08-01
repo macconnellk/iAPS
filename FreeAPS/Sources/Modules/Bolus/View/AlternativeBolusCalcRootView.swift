@@ -72,6 +72,12 @@ extension Bolus {
             } else { return 0 }
         }
 
+        /// Percentage the falling glucose guard has removed from the recommendation.
+        private var guardReduction: String {
+            let reduction = (1 - state.trendGuardScale) * 100
+            return NSDecimalNumber(decimal: reduction).intValue.description + "%"
+        }
+
         var body: some View {
             Form {
                 Section {
@@ -242,6 +248,44 @@ extension Bolus {
                         }
                     }
                 }
+
+                Section {
+                    Toggle(isOn: $state.trendGuardEnabled) {
+                        Text("Reduce dose for falling glucose")
+                    }
+                    .onChange(of: state.trendGuardEnabled) {
+                        state.insulinCalculated = state.calculateInsulin()
+                    }
+
+                    if state.trendGuardEnabled, state.trendGuardScale < 1 {
+                        HStack {
+                            Text("Reduced for falling glucose")
+                            Spacer()
+                            Text(guardReduction)
+                        }
+                        .font(.footnote)
+                        .foregroundStyle(.orange)
+                    }
+
+                    DisclosureGroup("Guard settings") {
+                        HStack {
+                            Text("Delta weight")
+                            Spacer()
+                            DecimalTextField("1.5", value: $state.trendGuardDeltaWeight, formatter: formatter)
+                        }
+                        HStack {
+                            Text("Minimum dose fraction")
+                            Spacer()
+                            DecimalTextField("0.75", value: $state.trendGuardFloor, formatter: formatter)
+                        }
+                    }
+                    .onChange(of: state.trendGuardDeltaWeight) {
+                        state.insulinCalculated = state.calculateInsulin()
+                    }
+                    .onChange(of: state.trendGuardFloor) {
+                        state.insulinCalculated = state.calculateInsulin()
+                    }
+                } header: { Text("Falling Glucose Guard") }
             }
             .interactiveDismissDisabled()
             .compactSectionSpacing()
