@@ -104,9 +104,6 @@ extension Bolus {
         /// Multiplier produced by the most recent calculation. 1 when the guard did not engage.
         @Published var trendGuardScale: Decimal = 1
 
-        /// Units removed by the falling glucose guard. Negative. Zero when inert.
-        @Published var trendGuardDelta: Decimal = 0
-
         private enum GuardKeys {
             static let enabled = "trendGuardEnabled"
             static let deltaWeight = "trendGuardDeltaWeight"
@@ -146,7 +143,12 @@ extension Bolus {
             useCalc = settings.settings.useCalc
             fattyMeals = settings.settings.fattyMeals
             fattyMealFactor = settings.settings.fattyMealFactor
-            eventualBG = settings.settings.eventualBG
+            // Pinned false rather than read from settings. The oref0 eventual-glucose path is
+            // unused on this branch and is unsafe to reach: it bypasses prepareData() entirely,
+            // so `data` keeps its one-element initializer and IllustrationView's positional
+            // legend traps on data[1] the moment Calculations is opened. Ignoring the setting
+            // keeps the Swift calculator whatever the toggle says.
+            eventualBG = false
             displayPredictions = settings.settings.displayPredictions
             closedLoop = settings.settings.closedLoop
             loopDate = apsManager.lastLoopDate
@@ -296,15 +298,10 @@ extension Bolus {
 
             // Applied to the final recommendation rather than to any single component,
             // because the carb term dominates at a large ISF and scaling anything smaller
-            // has no practical effect. trendGuardDelta is captured before the scale is
-            // applied so the Calculations popup can name the reduction rather than folding
-            // it into the Factors plug.
+            // has no practical effect.
             trendGuardScale = fallingGlucoseScale()
             if trendGuardScale < 1 {
-                trendGuardDelta = insulinCalculated * (trendGuardScale - 1)
                 insulinCalculated *= trendGuardScale
-            } else {
-                trendGuardDelta = 0
             }
 
             // A blend of Oref0 predictions and the Swift calculator {
@@ -611,7 +608,6 @@ extension Bolus {
                     InsulinRequired(agent: NSLocalizedString("IOB", comment: ""), amount: iobInsulinReduction),
                     InsulinRequired(agent: NSLocalizedString("Glucose", comment: ""), amount: targetDifferenceInsulin),
                     InsulinRequired(agent: NSLocalizedString("Trend", comment: ""), amount: fifteenMinInsulin),
-                    InsulinRequired(agent: NSLocalizedString("Falling BG", comment: ""), amount: trendGuardDelta),
                     InsulinRequired(agent: NSLocalizedString("Factors", comment: ""), amount: 0),
                     InsulinRequired(agent: NSLocalizedString("Amount", comment: ""), amount: insulinCalculated)
                 ] :
@@ -619,16 +615,13 @@ extension Bolus {
                         InsulinRequired(agent: NSLocalizedString("Carbs", comment: ""), amount: wholeCobInsulin),
                         InsulinRequired(agent: NSLocalizedString("IOB", comment: ""), amount: iobInsulinReduction),
                         InsulinRequired(agent: NSLocalizedString("Glucose", comment: ""), amount: targetDifferenceInsulin),
-                        InsulinRequired(agent: NSLocalizedString("Falling BG", comment: ""), amount: trendGuardDelta),
                         InsulinRequired(agent: NSLocalizedString("Factors", comment: ""), amount: 0),
                         InsulinRequired(agent: NSLocalizedString("Amount", comment: ""), amount: insulinCalculated)
                     ]
                 let total = prepareData.dropLast().map(\.amount).reduce(0, +)
                 if total > 0 {
-                    // Factors is the balancing plug. Its index is one later than the row count
-                    // would suggest because the Falling BG row sits immediately ahead of it.
                     let factor = -1 * (total - insulinCalculated)
-                    prepareData[!disable15MinTrend ? 5 : 4]
+                    prepareData[!disable15MinTrend ? 4 : 3]
                         .amount = abs(factor) >= minBolus ? factor : 0
                 }
                 data = prepareData
