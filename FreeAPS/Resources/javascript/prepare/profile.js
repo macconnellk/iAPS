@@ -198,6 +198,3 @@ function generate(pumpsettings_data, bgtargets_data, isf_data, basalprofile_data
 
     return profile;
 }
-    
-    return profile;
-}
