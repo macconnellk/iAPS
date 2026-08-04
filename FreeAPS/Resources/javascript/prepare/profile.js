@@ -172,5 +172,32 @@ function generate(pumpsettings_data, bgtargets_data, isf_data, basalprofile_data
         return;
     }
 
+    // ---- Constant-rate minimum carb absorption ------------------------------
+    // REINTERPRETS the min_5m_carbimpact preference as GRAMS PER HOUR rather than
+    // as mg/dL per 5 minutes, and derives the mg/dL figure oref actually expects.
+    //
+    // oref converts the setting back to grams as
+    //     grams_per_5m = min_5m_carbimpact * carb_ratio / ISF
+    // so a static mg/dL value produces a minimum decay rate that swings with the
+    // ISF/CR schedule. On this profile a static 8 gives 5.5 g/hr at 09:00 (ISF 207 /
+    // CR 11.8) and 14.3 g/hr at 03:00 (ISF 111 / CR 16.5) - a 2.6x spread with no
+    // physiological basis. Carb absorption is approximately constant outside
+    // activity, so grams per hour is the quantity worth pinning.
+    //
+    // THE SETTING IS NOW READ IN GRAMS PER HOUR. Left at the oref default of 8 it
+    // will be treated as 8 g/hr, which is slower than the current behaviour in most
+    // blocks, not faster. Set it deliberately.
+    //
+    // Runs on every loop via makeProfiles(), so it tracks the active ISF block.
+    var hourlyCarbAbsorption = Math.max(5, Math.min(40, profile.min_5m_carbimpact || 20));
+
+    if (profile.sens > 0 && profile.carb_ratio > 0) {
+        var derived = (hourlyCarbAbsorption / 12) * profile.sens / profile.carb_ratio;
+        profile.min_5m_carbimpact = Math.round(derived * 100) / 100;
+    }
+
+    return profile;
+}
+    
     return profile;
 }
