@@ -78,7 +78,7 @@ final class OpenAPS {
                     print("Time for tdd \(-1 * now.timeIntervalSinceNow) seconds")
 
                     now = Date.now
-                    let (meal, iob) = await (self.meal(
+                    let (orefMeal, iob) = await (self.meal(
                         pumphistory: pumpHistory,
                         profile: storedProfile,
                         basalProfile: basalProfile,
@@ -92,6 +92,23 @@ final class OpenAPS {
                         clock: clock,
                         autosens: autosens.isEmpty ? .null : autosens
                     ))
+
+                    // Must run before the meal is saved and before middleware / determine-basal read it.
+                    let cobClamp = COBMonotonicityClamp.apply(
+                        meal: orefMeal,
+                        carbHistory: carbs,
+                        floorGramsPerHour: preferencesData.map { NSDecimalNumber(decimal: $0.min5mCarbimpact).doubleValue },
+                        now: clock,
+                        previous: COBMonotonicityClamp.loadState()
+                    )
+                    COBMonotonicityClamp.saveState(cobClamp.state)
+                    let meal = cobClamp.meal
+                    if cobClamp.decision == .clamped {
+                        debug(
+                            .openAPS,
+                            "COB clamp: oref \(cobClamp.orefCOB ?? -1) -> \(cobClamp.reportedCOB ?? -1)"
+                        )
+                    }
 
                     self.storage.save(meal, as: Monitor.meal)
                     self.storage.save(iob, as: Monitor.iob)
@@ -1396,3 +1413,226 @@ final class OpenAPS {
         return (try? String(contentsOf: url)) ?? ""
     }
 }
+
+// BEGIN COBMonotonicityClamp
+
+/// Caps the COB reported by oref's meal module so it cannot rise unless the carb history changed.
+///
+/// oref rebuilds COB from the full carb history every loop and re-credits every past 5-minute slot
+/// using the current ISF and CR. When the schedule crosses a boundary where ISF falls or CR rises,
+/// past absorption shrinks and COB steps up with no new carbs (Sep 22 20:00: 75 -> 86 g), which
+/// drives extra insulin.
+///
+/// Invariant: reported COB <= trusted COB - (configured floor x elapsed time) + one 5-minute slot.
+/// The trusted value resets to oref's own figure on any carb-history change, on the first run,
+/// and after a gap. The cap is a min(): it never raises COB and never slows a faster oref decay.
+enum COBMonotonicityClamp {
+    static let stateKey = "COBMonotonicityClamp.state.v1"
+
+    /// Beyond one missed loop the stored anchor no longer describes the current meal state.
+    static let staleAfter: TimeInterval = 15 * 60
+
+    /// meal.carbs moves by sub-gram amounts from rounding, not from entries.
+    static let carbsIncreaseTolerance: Double = 0.5
+
+    /// Same default and bounds prepare/profile.js applies to the preference.
+    static let defaultFloorGramsPerHour: Double = 20
+    static let minFloorGramsPerHour: Double = 5
+    static let maxFloorGramsPerHour: Double = 40
+
+    struct State: Codable, Equatable {
+        var anchorCOB: Double
+        var runTime: Date
+        var mealCarbs: Double
+        var lastCarbTime: Double?
+        var carbFingerprints: [String]
+    }
+
+    enum Decision: String {
+        case firstRun
+        case clockBackward
+        case stale
+        case carbsUnreadable
+        case carbsChanged
+        case tracking
+        case clamped
+        case invalidMeal
+    }
+
+    struct Evaluation: Equatable {
+        let reportedCOB: Double
+        let decision: Decision
+        let state: State
+        let ceiling: Double?
+    }
+
+    struct Outcome {
+        let meal: String
+        let decision: Decision
+        let orefCOB: Double?
+        let reportedCOB: Double?
+        let state: State?
+    }
+
+    static func floorRate(_ preference: Double?) -> Double {
+        let raw = preference ?? defaultFloorGramsPerHour
+        guard raw.isFinite else { return defaultFloorGramsPerHour }
+        return min(max(raw, minFloorGramsPerHour), maxFloorGramsPerHour)
+    }
+
+    static func evaluate(
+        orefCOB: Double,
+        mealCarbs: Double,
+        lastCarbTime: Double?,
+        carbFingerprints: Set<String>,
+        carbsReadable: Bool,
+        floorGramsPerHour: Double?,
+        now: Date,
+        previous: State?
+    ) -> Evaluation {
+        let sortedFingerprints = carbFingerprints.sorted()
+
+        func passthrough(_ decision: Decision) -> Evaluation {
+            Evaluation(
+                reportedCOB: orefCOB,
+                decision: decision,
+                state: State(
+                    anchorCOB: orefCOB,
+                    runTime: now,
+                    mealCarbs: mealCarbs,
+                    lastCarbTime: lastCarbTime,
+                    carbFingerprints: sortedFingerprints
+                ),
+                ceiling: nil
+            )
+        }
+
+        guard let previous = previous else { return passthrough(.firstRun) }
+
+        let elapsed = now.timeIntervalSince(previous.runTime)
+        if elapsed < 0 { return passthrough(.clockBackward) }
+        if elapsed > staleAfter { return passthrough(.stale) }
+
+        // Any doubt about the carb history releases the cap: suppressing a real entry is the worse error.
+        if !carbsReadable { return passthrough(.carbsUnreadable) }
+        let hasNewEntry = !carbFingerprints.isSubset(of: Set(previous.carbFingerprints))
+        let carbsIncreased = mealCarbs > previous.mealCarbs + carbsIncreaseTolerance
+        let lastCarbMoved = lastCarbTime != previous.lastCarbTime
+        if hasNewEntry || carbsIncreased || lastCarbMoved { return passthrough(.carbsChanged) }
+
+        let rate = floorRate(floorGramsPerHour)
+        let line = previous.anchorCOB - rate * elapsed / 3600
+        // One slot of headroom absorbs loop-timing jitter against oref's per-reading decrement.
+        let ceiling = max(0, line + rate / 12)
+        let nextState = State(
+            anchorCOB: max(0, min(orefCOB, line)),
+            runTime: now,
+            mealCarbs: mealCarbs,
+            lastCarbTime: lastCarbTime,
+            carbFingerprints: sortedFingerprints
+        )
+
+        if orefCOB > ceiling {
+            return Evaluation(
+                reportedCOB: min(orefCOB, ceiling.rounded()),
+                decision: .clamped,
+                state: nextState,
+                ceiling: ceiling
+            )
+        }
+        return Evaluation(reportedCOB: orefCOB, decision: .tracking, state: nextState, ceiling: ceiling)
+    }
+
+    static func apply(
+        meal: String,
+        carbHistory: String,
+        floorGramsPerHour: Double?,
+        now: Date,
+        previous: State?
+    ) -> Outcome {
+        guard let data = meal.data(using: .utf8),
+              var object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let orefCOB = number(object["mealCOB"]),
+              orefCOB.isFinite,
+              orefCOB >= 0
+        else {
+            return Outcome(meal: meal, decision: .invalidMeal, orefCOB: nil, reportedCOB: nil, state: nil)
+        }
+
+        let fingerprints = carbFingerprints(carbHistory)
+        let evaluation = evaluate(
+            orefCOB: orefCOB,
+            mealCarbs: number(object["carbs"]) ?? 0,
+            lastCarbTime: number(object["lastCarbTime"]),
+            carbFingerprints: fingerprints ?? [],
+            carbsReadable: fingerprints != nil,
+            floorGramsPerHour: floorGramsPerHour,
+            now: now,
+            previous: previous
+        )
+
+        if evaluation.decision == .clamped {
+            object["mealCOB"] = evaluation.reportedCOB
+        }
+        // Read by middleware and visible in the stored meal file; oref ignores unknown keys.
+        object["orefMealCOB"] = orefCOB
+        object["cobClampDecision"] = evaluation.decision.rawValue
+
+        guard JSONSerialization.isValidJSONObject(object),
+              let encoded = try? JSONSerialization.data(withJSONObject: object),
+              let text = String(data: encoded, encoding: .utf8)
+        else {
+            return Outcome(meal: meal, decision: .invalidMeal, orefCOB: orefCOB, reportedCOB: nil, state: nil)
+        }
+
+        return Outcome(
+            meal: text,
+            decision: evaluation.decision,
+            orefCOB: orefCOB,
+            reportedCOB: evaluation.reportedCOB,
+            state: evaluation.state
+        )
+    }
+
+    /// One string per carb-bearing record. A string not seen last run means an entry was added,
+    /// edited or back-dated. Records leaving the window only remove strings and do not release.
+    static func carbFingerprints(_ carbHistory: String) -> Set<String>? {
+        guard let data = carbHistory.data(using: .utf8),
+              let entries = (try? JSONSerialization.jsonObject(with: data)) as? [[String: Any]]
+        else { return nil }
+
+        var result = Set<String>()
+        for entry in entries {
+            guard let carbs = number(entry["carbs"]), carbs > 0 else { continue }
+            let id = text(entry["_id"] ?? entry["id"])
+            let date = text(entry["actualDate"] ?? entry["created_at"])
+            result.insert("\(id)|\(date)|\(String(format: "%.1f", carbs))")
+        }
+        return result
+    }
+
+    static func number(_ value: Any?) -> Double? {
+        guard let n = value as? NSNumber, CFGetTypeID(n) != CFBooleanGetTypeID() else { return nil }
+        return n.doubleValue
+    }
+
+    static func text(_ value: Any?) -> String {
+        guard let value = value, !(value is NSNull) else { return "" }
+        return "\(value)"
+    }
+
+    static func loadState(_ defaults: UserDefaults = .standard) -> State? {
+        guard let data = defaults.data(forKey: stateKey) else { return nil }
+        return try? JSONDecoder().decode(State.self, from: data)
+    }
+
+    static func saveState(_ state: State?, _ defaults: UserDefaults = .standard) {
+        guard let state = state, let data = try? JSONEncoder().encode(state) else {
+            defaults.removeObject(forKey: stateKey)
+            return
+        }
+        defaults.set(data, forKey: stateKey)
+    }
+}
+
+// END COBMonotonicityClamp
