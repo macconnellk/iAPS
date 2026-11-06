@@ -332,6 +332,8 @@ extension NightscoutAPI {
         var request = URLRequest(url: components.url!)
         request.allowsConstrainedNetworkAccess = false
         request.timeoutInterval = Config.timeout
+        // The poll URL stays identical between enacted commands; never answer it from the local cache.
+        request.cachePolicy = .reloadIgnoringLocalCacheData
 
         if let secret = secret {
             request.addValue(secret.sha1(), forHTTPHeaderField: "api-secret")
