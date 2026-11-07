@@ -54,4 +54,5 @@ struct NightscoutProfileStore: JSON {
     var enteredBy: String
     let store: [String: ScheduledNightscoutProfile]
     let profile: String?
+    var iapsOverridePresets: NightscoutOverridePresetCatalog? = nil
 }
