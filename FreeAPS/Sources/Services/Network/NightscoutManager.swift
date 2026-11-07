@@ -55,6 +55,10 @@ final class BaseNightscoutManager: NightscoutManager, Injectable {
     private var pendingLogData: Data?
     private let pendingLogDateKey = "iAPS.pendingLogUploadDate"
 
+    private static let uploadedNSOverridePresets = "upload/uploaded-ns-override-presets.json"
+    // Read and written only on processQueue.
+    private var presetUploadInFlight = false
+
     private var isNetworkReachable: Bool {
         reachabilityManager.isReachable
     }
@@ -730,6 +734,7 @@ final class BaseNightscoutManager: NightscoutManager, Injectable {
         }
 
         uploadPodAge()
+        uploadOverridePresetsIfChanged()
     }
 
     func uploadPodAge() {
@@ -760,6 +765,19 @@ final class BaseNightscoutManager: NightscoutManager, Injectable {
     }
 
     func uploadProfileAndSettings(_ force: Bool) {
+        uploadProfileAndSettings(force, nightscoutOnly: false)
+    }
+
+    /// nightscoutOnly: the per-loop preset check. Uploads the Nightscout profile document only and skips the
+    /// statistics-server blocks, whose preset reads are not confined to the Core Data context's queue.
+    private func uploadProfileAndSettings(_ force: Bool, nightscoutOnly: Bool) {
+        var nightscoutUploadStarted = false
+        defer {
+            if nightscoutOnly, !nightscoutUploadStarted {
+                processQueue.async { self.presetUploadInFlight = false }
+            }
+        }
+
         var loaded = Loaded()
 
         // Start trying retrieving files
@@ -900,6 +918,9 @@ final class BaseNightscoutManager: NightscoutManager, Injectable {
                 profile: name
             )
 
+            let catalog = currentOverridePresetCatalog()
+            let presetCanonical = String(decoding: catalog.canonicalPresets, as: UTF8.self)
+
             let q = NightscoutProfileStore(
                 defaultProfile: "default",
                 startDate: now,
@@ -907,31 +928,40 @@ final class BaseNightscoutManager: NightscoutManager, Injectable {
                 units: nsUnits,
                 enteredBy: NigtscoutTreatment.local,
                 store: [defaultProfile: ps],
-                profile: name
+                profile: name,
+                iapsOverridePresets: catalog
             )
 
-            // UPLOAD Profiles WHEN CHANGED
+            // UPLOAD Profiles WHEN CHANGED (schedules or override presets)
             if let uploadedProfile = storage.retrieveFile(OpenAPS.Nightscout.uploadedProfile, as: NightscoutProfileStore.self),
-               (uploadedProfile.store["default"]?.rawJSON ?? "").sorted() == ps.rawJSON.sorted(), !force
+               (uploadedProfile.store["default"]?.rawJSON ?? "").sorted() == ps.rawJSON.sorted(),
+               presetCanonical == storage.retrieveRaw(Self.uploadedNSOverridePresets), !force
             {
                 NSLog("NightscoutManager uploadProfile, no profile change")
             } else {
                 if let ns = nightscoutAPI, isUploadEnabled {
+                    nightscoutUploadStarted = true
                     processQueue.async {
                         ns.uploadProfile(q)
                             .sink { completion in
                                 switch completion {
                                 case .finished:
                                     self.storage.save(p, as: OpenAPS.Nightscout.uploadedProfile)
+                                    self.storage.save(presetCanonical, as: Self.uploadedNSOverridePresets)
                                     debug(.nightscout, "Profile uploaded")
                                 case let .failure(error):
                                     debug(.nightscout, error.localizedDescription)
+                                }
+                                if nightscoutOnly {
+                                    self.processQueue.async { self.presetUploadInFlight = false }
                                 }
                             } receiveValue: {}
                             .store(in: &self.lifetime)
                     }
                 }
             }
+
+            if nightscoutOnly { return }
 
             // UPLOAD Profiles to database WHEN CHANGED
             if let uploadedProfile = storage.retrieveFile(
@@ -960,6 +990,8 @@ final class BaseNightscoutManager: NightscoutManager, Injectable {
                 }
             }
         }
+
+        if nightscoutOnly { return }
 
         // UPLOAD PREFERNCES WHEN CHANGED
         if isStatsUploadEnabled || force {
@@ -1096,6 +1128,28 @@ final class BaseNightscoutManager: NightscoutManager, Injectable {
 
     private func getIdentifier() -> String {
         keychain.getIdentifier()
+    }
+
+    /// Every managed-object read happens inside the view context's queue; only value structs leave the block.
+    private func currentOverridePresetCatalog() -> NightscoutOverridePresetCatalog {
+        let token = getIdentifier()
+        var raw: [MigratedOverridePresets] = []
+        CoreDataStack.shared.persistentContainer.viewContext.performAndWait {
+            raw = Database(token: token).overridePresetDatabaseUpload(profile: self.name, token: token).presets
+        }
+        return NightscoutOverridePresetCatalog(presets: raw, generatedAt: Date())
+    }
+
+    /// Runs each loop. Presets are edited, deleted, restored and created through several paths, so the
+    /// uploaded state is compared here rather than hooked at each save.
+    private func uploadOverridePresetsIfChanged() {
+        processQueue.async {
+            guard self.nightscoutAPI != nil, self.isUploadEnabled, !self.presetUploadInFlight else { return }
+            let canonical = String(decoding: self.currentOverridePresetCatalog().canonicalPresets, as: UTF8.self)
+            guard canonical != self.storage.retrieveRaw(Self.uploadedNSOverridePresets) else { return }
+            self.presetUploadInFlight = true
+            self.uploadProfileAndSettings(false, nightscoutOnly: true)
+        }
     }
 
     private var glucoseFormatter: NumberFormatter {
@@ -1535,5 +1589,64 @@ extension BaseNightscoutManager: TempTargetsObserver {
 extension BaseNightscoutManager: GlucoseObserver {
     func glucoseDidUpdate(_ bloodGlucose: [BloodGlucose]) {
         uploadGlucose(bloodGlucose: bloodGlucose)
+    }
+}
+
+struct NightscoutOverridePresetEntry: JSON {
+    let preset: MigratedOverridePresets
+    let succeedingName: String?
+
+    /// succeedingName is written as an explicit null when there is no successor or it was deleted.
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(preset, forKey: .preset)
+        try container.encode(succeedingName, forKey: .succeedingName)
+    }
+}
+
+/// The override preset list carried in each Nightscout profile document as `iapsOverridePresets`.
+struct NightscoutOverridePresetCatalog: JSON {
+    var schema = 1
+    let generatedAt: Date
+    let presets: [NightscoutOverridePresetEntry]
+
+    /// Order is total: id, then name (older presets share the default id "Empty"), then the preset's own
+    /// canonical bytes. The successor is resolved by id within that order, so repeated fetches give
+    /// identical output.
+    init(presets raw: [MigratedOverridePresets], generatedAt: Date) {
+        let sorted = raw.map { (preset: $0, bytes: Self.canonicalBytes(Self.undated($0))) }
+            .sorted {
+                if $0.preset.id != $1.preset.id { return $0.preset.id < $1.preset.id }
+                if $0.preset.name != $1.preset.name { return $0.preset.name < $1.preset.name }
+                return $0.bytes.lexicographicallyPrecedes($1.bytes)
+            }
+            .map { $0.preset }
+        presets = sorted.map { preset in
+            let successor = preset.succeeding.flatMap { id in id.isEmpty ? nil : sorted.first(where: { $0.id == id })?.name }
+            return NightscoutOverridePresetEntry(preset: preset, succeedingName: successor)
+        }
+        self.generatedAt = generatedAt
+    }
+
+    /// Change detection for the per-loop upload. Byte comparison, not character-sorted JSON (which misses
+    /// digit swaps such as 85 → 58). generatedAt is excluded, and each preset's save date is fixed, because
+    /// a missing date is filled with the current time and would otherwise change on every fetch.
+    var canonicalPresets: Data {
+        Self.canonicalBytes(presets.map {
+            NightscoutOverridePresetEntry(preset: Self.undated($0.preset), succeedingName: $0.succeedingName)
+        })
+    }
+
+    private static func undated(_ preset: MigratedOverridePresets) -> MigratedOverridePresets {
+        var copy = preset
+        copy.date = Date(timeIntervalSince1970: 0)
+        return copy
+    }
+
+    private static func canonicalBytes<T: Encodable>(_ value: T) -> Data {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        encoder.dateEncodingStrategy = .customISO8601
+        return (try? encoder.encode(value)) ?? Data()
     }
 }
