@@ -8,7 +8,7 @@
 |---|---|
 | Upstream | `Artificial-Pancreas/iAPS` `main` |
 | Fork | `macconnellk/iAPS` `main` (last custom commit `3f0a2533`, Nov 7 2026) |
-| Middleware repo | `macconnellk/middleware`, file `ClaudeMiddleware` (v2.3) |
+| Middleware repo | `macconnellk/middleware`, file `ClaudeMiddleware` (**v2.4**, Nov 8) |
 | Divergence (Nov 7) | 7 custom files. **5 upstream commits not merged:** 8.3.92 version bump (`Config.xcconfig`), "Pre iOS 26 color update" (`ViewModifiers.swift`), and workflow changes. None touches a custom file |
 | On Ben's phone | **TestFlight build 210** (installed Nov 7, 9:45 AM) |
 
@@ -28,7 +28,7 @@
 
 | ID | Change | Lives in | Current |
 |---|---|---|---|
-| **M1** | Middleware: **sleep mode (changes dosing overnight)**, status line, autoISF settings token | **Canonical: `macconnellk/middleware` → `ClaudeMiddleware`.** Runs from the iAPS in-app editor (Settings → Middleware). Tweaker copy: `middleware/spec-e/middleware_v2.3.js` | **v2.3** (Oct 14) |
+| **M1** | Middleware: **sleep mode (changes dosing overnight)**, status line, autoISF settings token | **Canonical: `macconnellk/middleware` → `ClaudeMiddleware`.** Runs from the iAPS in-app editor (Settings → Middleware). Tweaker copy: `middleware/spec-e/middleware_v2.3.js` | **v2.4** (Nov 8) |
 | **S1** | Preset Scheduler: Google Calendar "iAPS Presets" → Nightscout announcement → iAPS starts the preset | Google Apps Script. Source: Tweaker `preset-scheduler/` | **v1.4** (live Nov 6) |
 | **P1** | Settings the custom code depends on | Ben's phone | See §4 |
 
@@ -130,7 +130,7 @@
 
 - **Runs:** inside iAPS every loop (`middleware(iob, currenttemp, glucose, profile, autosens, meal, reservoir, clock)`), from the in-app editor.
 - **Canonical source:** `macconnellk/middleware`, file `ClaudeMiddleware` (v2.3 header). Paste that file into the editor to deploy. **Update the repo first, then the phone.**
-- **Sleep mode (changes dosing):** from 21:00 to 03:00, when BG ≤ 140:
+- **Sleep mode as it ran in v2.3 (until Nov 8),** from 21:00 to 03:00, when BG ≤ 140:
   - SMB and UAM are turned off, and the target is raised by 10. With an override target active and no temp target, the raise stacks on the override target.
   - **Hypo mode:** if IOB ≤ 0.1 U as well, the target goes up 40 more (+50 in total), and basal is scaled by a factor depending on BG and IOB:
 
@@ -149,6 +149,20 @@
   - **v2.1** (Sep 30): the status line reports the override-scaled ISF, CR and max IOB.
   - **v2.2** (Sep 30): adds `Target was/now` and the `MW v2.2 values pre-AutoISF` tag.
   - **v2.3** (Oct 14, Spec F): appends the `AISF[…]` autoISF settings token; `ovr=1` when a preset carries its own autoISF settings.
+  - **v2.4** (Nov 8, spec `middleware/spec-e/spec-mw24-sleep-mode.md` r4): sleep mode realigned to its intent.
+    - **Why:** v2.3's hypo mode ran in 55–76 % of 00:00–02:00 loops (target 165, basal × 0.6), and it released in one loop. The suspected cause of the 01:00–03:00 rebounds.
+    - **What:**
+      - hypo mode needs IOB ≤ 0, a fall of ≥ 8 per 15 min within the last 20 min, and BG ≤ 120
+      - severity grades continuously on a 30-min projection
+      - the base raise tapers from 110 to 140
+      - SMBs are off only at IOB ≤ 0
+      - ISF/CR softening is dropped
+      - a 03:00–03:30 ramp
+      - releases are capped at 20 per 5 min (stateless, reconstructed from the glucose history)
+      - `SLEEP[...]` (settings) and `SLEEPSTATE[...]` (per loop, including `s` and `hold`) on the status line
+    - **Tests:** harness 79/0 + 28/0, mutants 3/3 (`RUN_v2.4.md`).
+    - **Rollback:** paste `middleware_v2.3.js` (md5 b82dfd5e).
+    - **Watch:** two weeks against the Nov 7 baseline (hypo 55/76/47 % at 00/01/02 → ≤ 15 %; 02:00–04:00 peak median ≤ 150; hour 3 TIR ≥ 55 %), read through tool v4.2.6/v4.2.7.
 - **Why it matters:** the tool reads the status line (override, ISF/CR, `Carb floor`, `COB held`, `AISF`) from the devicestatus `reason`.
 - **Specs:** Tweaker `middleware/spec-e/` (Spec E, E.1, F, harnesses).
 - **Rollback:** paste the previous version's file into the editor.
@@ -168,7 +182,8 @@
 | `trendGuardEnabled` / `DeltaWeight` / `Floor` | F3 | Guard on / projection weight / minimum multiplier | on / 1.5 / 0.75 (confirm on device) |
 | `overrideFactor` | F3 | Upfront fraction of the gross meal requirement; SMBs deliver the rest | 0.7 |
 | Remote control | F4, S1 | Must be on for scheduler commands | on |
-| Sleep-mode window and thresholds | M1 | 21:00–03:00, BG ≤ 140, +10 / +50, hypo IOB ≤ 0.1 U | set in `ClaudeMiddleware` CONFIG, not in the app settings |
+| `allowOneMinuteGlucose` | M1 (v2.4 fall memory, Δ15) | Off means glucose readings at least 4.5 min apart | off (5-minute readings) |
+| Sleep-mode settings (v2.4) | M1 | `SLEEP[v1 win=2100-0330 base=140 raise=10 taper=30 smbiob=0.00 hiob=0.00 hd15=-8 mem=20 hbg=120 low=70 proj=2 hraise=40 bmin=0.60 soft=0 ramp=30 step=20]`; `step` must stay ≥ 17 | in `ClaudeMiddleware` CONFIG, printed on every status line |
 | Override presets | F5, S1, review | Names must be exact; no `:`, `&`, `<` or `>` | 24 presets (Nov 7), uploaded by F5 |
 
 ## 5. Upstream merge checklist
