@@ -29,7 +29,7 @@
 | ID | Change | Lives in | Current |
 |---|---|---|---|
 | **M1** | Middleware: **sleep mode (changes dosing overnight)**, status line, autoISF settings token | **Canonical: `macconnellk/middleware` → `ClaudeMiddleware`.** Runs from the iAPS in-app editor (Settings → Middleware). Tweaker copy: `middleware/spec-e/middleware_v2.3.js` | **v2.4** (Nov 8) |
-| **S1** | Preset Scheduler: Google Calendar "iAPS Presets" → Nightscout announcement → iAPS starts the preset | Google Apps Script. Source: Tweaker `preset-scheduler/` | **v1.4** (live Nov 6) |
+| **S1** | Preset Scheduler: Google Calendar "iAPS Presets" → Nightscout announcement → iAPS starts the preset | Google Apps Script. Source: Tweaker `preset-scheduler/` | **v1.5** (live Nov 10) |
 | **P1** | Settings the custom code depends on | Ben's phone | See §4 |
 
 **Retired:** iOS Shortcuts automations that started presets (turned off Nov 7; the calendar is now the only automatic trigger).
@@ -167,12 +167,19 @@
 - **Specs:** Tweaker `middleware/spec-e/` (Spec E, E.1, F, harnesses).
 - **Rollback:** paste the previous version's file into the editor.
 
-### S1 — Preset Scheduler (v1.4)
+### S1 — Preset Scheduler (v1.5)
 
 - **Flow:** Google Calendar "iAPS Presets" → Apps Script, every 5 min → Nightscout `override:<name>` announcement → iAPS starts the preset (needs F4).
-- **Statuses:** VERIFIED, UNVERIFIED, SKIPPED_ACTIVE, SKIPPED_PENDING, REJECTED_TITLE, MISSED, NOOP_CANCEL.
+- **Statuses:** VERIFIED, UNVERIFIED, RETRYING, SKIPPED_ACTIVE, SKIPPED_PENDING, SKIPPED_STALE, SKIPPED_UNKNOWN, REJECTED_TITLE, MISSED, NOOP_CANCEL, ERROR.
+- **v1.5:**
+  - **Retries:** transient skips are retried every run until start + 15 min. RETRYING, SENT ON RETRY and the closing notices (NO ACTION NEEDED, CONFIRMED) go out at normal priority; the v1.4 alert only on final failure.
+  - **Replace:** an event may replace a running override the scheduler owns: its own VERIFIED preset, or that preset's successor started on time, per F5's `iapsOverridePresets`. Ownership also needs the status % to match, the parent's end-with-carbs and both glucose thresholds off, the parent's record at full length, no other override uploaded since the command, and 15 min of steady status uploads.
+  - Hand-started overrides are never replaced. Double-headers need no cancel event.
+- **Depends on:** F4 (remote commands are fetched) and F5 (the preset list, for ownership; without it the scheduler falls back to v1.4 behaviour plus retries).
 - **Alerts:** silent from 10 PM to 7 AM.
-- **Source and setup:** Tweaker `preset-scheduler/` (`SETUP.md`, the spec in `Specs/iaps-and-scheduler-specs/`). Production cutover Nov 6: NOOP posted 5:12 PM, started 5:20 PM, VERIFIED.
+- **Source and setup:** Tweaker `preset-scheduler/` (`SETUP.md`, the spec in `Specs/iaps-and-scheduler-specs/`; rollback files in `preset-scheduler/rollback-v1.4/`).
+  - Production cutover Nov 6 (v1.4): NOOP posted 5:12 PM, started 5:20 PM, VERIFIED.
+  - v1.5 deployed Nov 10, preflight all PASS at 12:18 PM. T-R1 was replaced by a live check at the first double-header (owner decision, Nov 10): about 5 min after game 2's start, the game preset should be running.
 
 ## 4. Settings the custom code depends on (P1)
 
